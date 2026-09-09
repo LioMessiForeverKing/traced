@@ -1,0 +1,34 @@
+{
+  "name": "traced",
+  "version": "0.1.0",
+  "description": "Content destination for Axis body worn cameras: recordings land in Supabase",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "tsx watch --env-file-if-exists=.env.local src/index.ts",
+    "start": "tsx --env-file-if-exists=.env.local src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "connection-file": "tsx --env-file-if-exists=.env.local scripts/connection-file.ts",
+    "fake-w800": "tsx --env-file-if-exists=.env.local scripts/fake-w800.ts",
+    "audit:comments": "python3 scripts/comment-audit.py src scripts test --quiet"
+  },
+  "license": "UNLICENSED",
+  "type": "module",
+  "private": "true",
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "@supabase/supabase-js": "^2.116.0",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.7",
+    "postgres": "^3.4.9",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.0"
+  }
+}
