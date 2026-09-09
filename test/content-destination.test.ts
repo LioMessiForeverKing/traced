@@ -4,9 +4,7 @@ import { CAPABILITIES } from "../src/capabilities.js";
 import { MemoryStore } from "../src/stores/memory.js";
 import { runFakeW800 } from "../src/testing/fake-w800.js";
 import { createHash } from "node:crypto";
-
-const PUBLIC_URL = "http://cd.test";
-const CREDS = { username: "traced", password: "correct-horse-battery", tokenSecret: "sixteen-byte-secret-ok" };
+import { CREDS, PUBLIC_URL } from "./credentials.js";
 
 function harness(now = () => Date.parse("2026-09-08T18:00:00Z")) {
   const store = new MemoryStore();

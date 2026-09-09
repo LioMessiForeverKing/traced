@@ -20,7 +20,7 @@ export interface PutObjectInput {
   sizeBytes: number | null;
 }
 
-export interface RecordingStore {
+export interface RecordingStore extends AnalysisStore {
   upsertSystem(id: string, meta: Meta): Promise<void>;
   upsertCameraUser(id: string, meta: Meta): Promise<void>;
   upsertDevice(serial: string, meta: Meta): Promise<void>;
@@ -28,4 +28,26 @@ export interface RecordingStore {
   updateRecording(name: string, meta: Meta): Promise<boolean>;
   putObject(input: PutObjectInput): Promise<"created" | "recording_missing">;
   updateObject(recording: string, name: string, meta: Meta): Promise<boolean>;
+}
+
+export interface AnalysisEvent {
+  offsetSeconds: number;
+  occurredAt: Date | null;
+  system: string | null;
+  zone: string | null;
+  description: string;
+  confidence: number;
+  frameOffsets: number[];
+}
+
+export interface AnalysisClaim {
+  name: string;
+  startTime: Date | null;
+}
+
+export interface AnalysisStore {
+  claimForAnalysis(): Promise<AnalysisClaim | null>;
+  clipSource(recording: string): Promise<string | null>;
+  finishAnalysis(recording: string, events: AnalysisEvent[]): Promise<void>;
+  failAnalysis(recording: string, reason: string): Promise<void>;
 }

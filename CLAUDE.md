@@ -33,10 +33,16 @@ The wider picture is in `Projects/Traced.md`; the design language with real toke
 ## Standing facts
 
 - **There is no Axis API key.** We are the server. The W800 authenticates to *us* with credentials
-  we mint into a connection file. The only external key is `ANTHROPIC_API_KEY`.
-- **`src/stores/supabase.ts` is unproven.** The tests exercise an in-memory store, so no Drizzle
-  query or bucket upload here has ever run against the real project. Treat the first real
-  `npm run fake-w800` as the actual test of it.
+  we mint into a connection file. The only external key is `OPENAI_API_KEY`.
+- **`src/stores/supabase.ts` has run against the real project** (2026-09-09). A full
+  `npm run fake-w800` offload wrote every row and uploaded both objects to Storage, and the
+  analysis claim, the signed clip URL and the event writeback all executed against real Postgres.
+  The tests still drive an in-memory store, so **CI still proves nothing about this file** — but it
+  is no longer untried code.
+- **`src/analysis/extractor.ts` has run against the real OpenAI API**, end to end through the whole
+  slice, on 2026-09-09. What it has never seen is real construction footage — only synthetic test
+  video, where an empty event list is the right answer. The tests still inject a stub on purpose;
+  a test suite must not spend money.
 - **RLS is on with no policies**, so only the service role reads anything. Correct today; it blocks
   everything browser-facing until the policies are designed.
 - Nothing has touched real hardware. Every protocol detail was read from the specification at

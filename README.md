@@ -37,6 +37,26 @@ npm run fake-w800                 # terminal 2
 a user and a device, creates a recording, uploads a clip and a GPS trail, and marks it complete.
 Check `recordings` and `recording_objects` in Supabase afterwards.
 
+The clip the fake sends is synthetic bytes, not real video, so analysis fails on it with
+`moov atom not found`. Pass a real MP4 as the second argument to watch the whole chain work:
+
+```bash
+npm run fake-w800 -- http://localhost:8080 ./some-clip.mp4
+```
+
+Set `ANALYSIS_ENABLED=false` to run the intake without an OpenAI key.
+
+## Analysis
+
+Once a recording reaches `Status: Complete`, a loop inside this same process picks it up: it claims
+the row, pulls scene-change frames out of the clip with ffmpeg, sends them to OpenAI, and writes
+timestamped rows into `recording_events`. The claim is a `FOR UPDATE SKIP LOCKED` on the recording,
+so the loop can move into its own process later without any of this code changing.
+
+Tune it with `ANALYSIS_MAX_FRAMES`, `ANALYSIS_SCENE_THRESHOLD`, `ANALYSIS_FRAME_WIDTH` and
+`ANALYSIS_POLL_MS`. Frame budget is the cost lever: frames dominate the bill. `OPENAI_MODEL`
+defaults to `gpt-5.5`; drop to a smaller model for volume without touching code.
+
 ## Verify
 
 ```bash
@@ -52,4 +72,12 @@ npm run audit:comments
 - No content encryption (`WantEncryption: false`).
 - Supabase Storage on the free plan caps a single upload at 50 MB. Long clips will 500 until the
   plan or the upload path changes.
-- Nothing analyses the footage yet. That is what the recording rows are for.
+- **The analysis has never seen real construction footage.** The whole path has run against the
+  real OpenAI API and real Supabase, but only on synthetic test-pattern video, where the correct
+  answer is an empty event list. Whether the events are any good is still unknown.
+- `CD_PUBLIC_URL` is the address the W800 is handed after auth. If it is stale, the offload
+  authenticates and then times out reaching storage.
+- Analysis runs in the intake process. A long clip competes with uploads for CPU. If that starts
+  to hurt, the claim is already built to let a second process take over.
+- Zone is whatever the model can read off a sign in frame, and usually nothing. There is no zone
+  model in this repo yet.

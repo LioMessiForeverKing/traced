@@ -15,6 +15,13 @@
       "when": 1788913100209,
       "tag": "0001_recordings_bucket",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788923750529,
+      "tag": "0002_moaning_sue_storm",
+      "breakpoints": true
     }
   ]
 }
