@@ -9,6 +9,7 @@ export interface FakeW800Options {
   fetch: FetchLike;
   triggerOn?: Date;
   clipSeconds?: number;
+  clipBytes?: Uint8Array;
 }
 
 export interface FakeW800Result {
@@ -110,7 +111,7 @@ export async function runFakeW800(options: FakeW800Options): Promise<FakeW800Res
   });
 
   const clipName = `${compactUtc(start).replace("T", "_")}_${recordingId}.mp4`;
-  const clipBytes = fakeMp4(64 * 1024);
+  const clipBytes = options.clipBytes ?? fakeMp4(64 * 1024);
   await send(`${storageUrl}/${recordingName}/${clipName}`, {
     method: "PUT",
     headers: {

@@ -1,14 +1,17 @@
+import { readFile } from "node:fs/promises";
 import { loadEnv } from "../src/env.js";
 import { runFakeW800 } from "../src/testing/fake-w800.js";
 
 const env = loadEnv();
 const baseUrl = process.argv[2] ?? `http://localhost:${env.PORT}`;
+const clipPath = process.argv[3];
 
 const result = await runFakeW800({
   baseUrl,
   username: env.CD_USERNAME,
   password: env.CD_PASSWORD,
   fetch: (url, init) => fetch(url, init),
+  clipBytes: clipPath ? new Uint8Array(await readFile(clipPath)) : undefined,
 });
 
 console.log(

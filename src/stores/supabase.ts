@@ -1,10 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
-import { eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { createDb } from "../db/client.js";
-import { bwsSystems, cameraUsers, devices, recordingObjects, recordings } from "../db/schema.js";
+import { bwsSystems, cameraUsers, devices, recordingEvents, recordingObjects, recordings } from "../db/schema.js";
 import type { Env } from "../env.js";
-import type { Meta, PutObjectInput, RecordingName, RecordingStore } from "../store.js";
+import type { AnalysisClaim, AnalysisEvent, Meta, PutObjectInput, RecordingName, RecordingStore } from "../store.js";
 import { metaTime, recordingStatus } from "../swift.js";
 
 function activeFlag(meta: Meta): boolean | null {
@@ -17,6 +17,8 @@ function activeFlag(meta: Meta): boolean | null {
 function mergedMeta(column: AnyPgColumn, meta: Meta) {
   return sql`${column} || ${JSON.stringify(meta)}::jsonb`;
 }
+
+const CLIP_URL_TTL_SECONDS = 60 * 60;
 
 export function createSupabaseStore(env: Env): RecordingStore {
   const db = createDb(env.DATABASE_URL);
@@ -146,6 +148,68 @@ export function createSupabaseStore(env: Env): RecordingStore {
         .where(sql`${recordingObjects.recordingName} = ${recording} and ${recordingObjects.name} = ${name}`)
         .returning({ id: recordingObjects.id });
       return rows.length > 0;
+    },
+
+    async claimForAnalysis(): Promise<AnalysisClaim | null> {
+      const next = db
+        .select({ name: recordings.name })
+        .from(recordings)
+        .where(and(eq(recordings.status, "complete"), eq(recordings.analysisStatus, "pending")))
+        .orderBy(asc(recordings.completedAt))
+        .limit(1)
+        .for("update", { skipLocked: true });
+
+      const rows = await db
+        .update(recordings)
+        .set({ analysisStatus: "running", updatedAt: new Date() })
+        .where(inArray(recordings.name, next))
+        .returning({ name: recordings.name, startTime: recordings.startTime });
+      return rows[0] ?? null;
+    },
+
+    async clipSource(recording) {
+      const rows = await db
+        .select({ storagePath: recordingObjects.storagePath })
+        .from(recordingObjects)
+        .where(and(eq(recordingObjects.recordingName, recording), eq(recordingObjects.kind, "clip")))
+        .orderBy(asc(recordingObjects.startTime))
+        .limit(1);
+      const storagePath = rows[0]?.storagePath;
+      if (!storagePath) return null;
+      const { data, error } = await bucket.createSignedUrl(storagePath, CLIP_URL_TTL_SECONDS);
+      if (error) throw error;
+      return data.signedUrl;
+    },
+
+    async finishAnalysis(recording, events) {
+      await db.transaction(async (tx) => {
+        await tx.delete(recordingEvents).where(eq(recordingEvents.recordingName, recording));
+        if (events.length > 0) {
+          await tx.insert(recordingEvents).values(
+            events.map((event) => ({
+              recordingName: recording,
+              offsetSeconds: event.offsetSeconds,
+              occurredAt: event.occurredAt,
+              system: event.system,
+              zone: event.zone,
+              description: event.description,
+              confidence: event.confidence,
+              frameOffsets: event.frameOffsets,
+            })),
+          );
+        }
+        await tx
+          .update(recordings)
+          .set({ analysisStatus: "done", analysisError: null, analysedAt: new Date(), updatedAt: new Date() })
+          .where(eq(recordings.name, recording));
+      });
+    },
+
+    async failAnalysis(recording, reason) {
+      await db
+        .update(recordings)
+        .set({ analysisStatus: "failed", analysisError: reason, analysedAt: new Date(), updatedAt: new Date() })
+        .where(eq(recordings.name, recording));
     },
   };
 }

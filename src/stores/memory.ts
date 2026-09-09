@@ -1,10 +1,16 @@
-import type { Meta, PutObjectInput, RecordingName, RecordingStore } from "../store.js";
-import { recordingStatus } from "../swift.js";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { AnalysisClaim, AnalysisEvent, Meta, PutObjectInput, RecordingName, RecordingStore } from "../store.js";
+import { metaTime, recordingStatus } from "../swift.js";
 
 export interface MemoryRecording extends RecordingName {
   status: string;
   meta: Meta;
   completedAt: Date | null;
+  analysisStatus: string;
+  analysisError: string | null;
+  analysedAt: Date | null;
 }
 
 export interface MemoryObject {
@@ -27,6 +33,7 @@ export class MemoryStore implements RecordingStore {
   readonly devices = new Map<string, Meta>();
   readonly recordings = new Map<string, MemoryRecording>();
   readonly objects = new Map<string, Map<string, MemoryObject>>();
+  readonly events = new Map<string, AnalysisEvent[]>();
 
   async upsertSystem(id: string, meta: Meta): Promise<void> {
     this.systems.set(id, { ...this.systems.get(id), ...meta });
@@ -50,6 +57,9 @@ export class MemoryStore implements RecordingStore {
       status: recordingStatus(meta, recording.rejected) ?? "transferring",
       meta,
       completedAt: null,
+      analysisStatus: "pending",
+      analysisError: null,
+      analysedAt: null,
     });
     this.objects.set(recording.name, new Map());
     return "created";
@@ -88,5 +98,42 @@ export class MemoryStore implements RecordingStore {
     if (!object) return false;
     object.meta = { ...object.meta, ...meta };
     return true;
+  }
+
+  async claimForAnalysis(): Promise<AnalysisClaim | null> {
+    for (const recording of this.recordings.values()) {
+      if (recording.status !== "complete" || recording.analysisStatus !== "pending") continue;
+      recording.analysisStatus = "running";
+      return { name: recording.name, startTime: metaTime(recording.meta, "starttime") };
+    }
+    return null;
+  }
+
+  async clipSource(recording: string): Promise<string | null> {
+    const objects = this.objects.get(recording);
+    if (!objects) return null;
+    const clip = [...objects.values()].find((object) => object.kind === "clip");
+    if (!clip) return null;
+    const dir = await mkdtemp(join(tmpdir(), "traced-clip-"));
+    const path = join(dir, clip.name.replaceAll("/", "_"));
+    await writeFile(path, clip.bytes);
+    return path;
+  }
+
+  async finishAnalysis(recording: string, events: AnalysisEvent[]): Promise<void> {
+    const existing = this.recordings.get(recording);
+    if (!existing) return;
+    this.events.set(recording, events);
+    existing.analysisStatus = "done";
+    existing.analysisError = null;
+    existing.analysedAt = new Date();
+  }
+
+  async failAnalysis(recording: string, reason: string): Promise<void> {
+    const existing = this.recordings.get(recording);
+    if (!existing) return;
+    existing.analysisStatus = "failed";
+    existing.analysisError = reason;
+    existing.analysedAt = new Date();
   }
 }
