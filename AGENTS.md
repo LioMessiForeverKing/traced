@@ -46,7 +46,8 @@ the gate before any policy change ships.
 `github.com/AxisCommunications/body-worn-integration-api`. Change the wire only with the spec open.
 
 **Analysis** — `src/analysis/` turns a complete recording into `recording_events`: `frames.ts`
-shells out to `ffmpeg-static`, `extractor.ts` is the only place that talks to OpenAI, `loop.ts`
+samples on a duration-derived interval *plus* scene changes, so a long continuous recording is
+covered end to end rather than only at its start; it shells out to `ffmpeg-static`, `extractor.ts` is the only place that talks to OpenAI, `loop.ts`
 claims work and owns the retry story. Nothing on the request path may call into it.
 
 **Access** — `src/access.ts` is the only place that mints an account or a membership. It uses the

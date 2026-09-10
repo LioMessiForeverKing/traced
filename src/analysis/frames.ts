@@ -22,14 +22,22 @@ export type FrameSampler = (source: string, options: SampleOptions) => Promise<F
 const FFMPEG = ffmpegStatic as unknown as string | null;
 
 const DECODE_CEILING = 400;
+const MIN_INTERVAL_SECONDS = 1;
 const FRAME_LINE = /^frame:\d+\s+pts:\S+\s+pts_time:(-?[\d.]+)/gm;
+const DURATION_LINE = /Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/;
 const URL_WITH_QUERY = /((?:https?:\/\/|\/)\S*?)\?\S*/g;
 
 export function redactUrls(text: string): string {
   return text.replace(URL_WITH_QUERY, "$1?<redacted>");
 }
 
-function ffmpeg(args: string[]): Promise<string> {
+interface Completed {
+  stdout: string;
+  stderr: string;
+  code: number | null;
+}
+
+function run(args: string[]): Promise<Completed> {
   if (!FFMPEG) throw new Error("ffmpeg-static did not resolve a binary for this platform");
   const binary = FFMPEG;
   return new Promise((resolve, reject) => {
@@ -39,11 +47,33 @@ function ffmpeg(args: string[]): Promise<string> {
     child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString("utf8")));
     child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf8")));
     child.on("error", reject);
-    child.on("close", (code: number | null) => {
-      if (code === 0) resolve(stdout);
-      else reject(new Error(`ffmpeg exited ${code}: ${redactUrls(stderr.trim()).slice(0, 500)}`));
-    });
+    child.on("close", (code: number | null) => resolve({ stdout, stderr, code }));
   });
+}
+
+async function ffmpeg(args: string[]): Promise<string> {
+  const { stdout, stderr, code } = await run(args);
+  if (code !== 0) throw new Error(`ffmpeg exited ${code}: ${redactUrls(stderr.trim()).slice(0, 500)}`);
+  return stdout;
+}
+
+export async function probeDuration(source: string): Promise<number | null> {
+  const { stderr } = await run(["-hide_banner", "-i", source]);
+  const match = DURATION_LINE.exec(stderr);
+  if (!match) return null;
+  const seconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+}
+
+export function selectExpression(sceneThreshold: number, interval: number | null): string {
+  const terms = ["eq(n,0)", `gt(scene,${sceneThreshold})`];
+  if (interval !== null) terms.push(`gte(t-prev_selected_t,${interval.toFixed(3)})`);
+  return terms.join("+");
+}
+
+export function coverageInterval(duration: number | null, maxFrames: number): number | null {
+  if (duration === null || maxFrames < 1) return null;
+  return Math.max(MIN_INTERVAL_SECONDS, duration / maxFrames);
 }
 
 function parseOffsets(stdout: string): number[] {
@@ -58,9 +88,9 @@ function thin<T>(items: T[], max: number): T[] {
 }
 
 export const sampleFrames: FrameSampler = async (source, options) => {
+  const interval = coverageInterval(await probeDuration(source), options.maxFrames);
   const dir = await mkdtemp(join(tmpdir(), "traced-frames-"));
   try {
-    const select = `eq(n,0)+gt(scene,${options.sceneThreshold})`;
     const stdout = await ffmpeg([
       "-hide_banner",
       "-loglevel",
@@ -68,7 +98,7 @@ export const sampleFrames: FrameSampler = async (source, options) => {
       "-i",
       source,
       "-vf",
-      `select='${select}',metadata=print:file=-,scale=${options.width}:-2`,
+      `select='${selectExpression(options.sceneThreshold, interval)}',metadata=print:file=-,scale=${options.width}:-2`,
       "-fps_mode",
       "vfr",
       "-frames:v",
