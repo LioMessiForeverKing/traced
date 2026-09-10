@@ -29,7 +29,13 @@ export function createSupabaseStore(env: Env): RecordingStore {
 
   return {
     async upsertSystem(id, meta) {
-      const values = { id, connectionId: meta.connectionid ?? null, systemName: meta.systemname ?? null, meta };
+      const values = {
+        id,
+        projectId: env.PROJECT_ID,
+        connectionId: meta.connectionid ?? null,
+        systemName: meta.systemname ?? null,
+        meta,
+      };
       await db
         .insert(bwsSystems)
         .values(values)
@@ -40,7 +46,14 @@ export function createSupabaseStore(env: Env): RecordingStore {
     },
 
     async upsertCameraUser(id, meta) {
-      const values = { id, name: meta.name ?? null, userId: meta.userid ?? null, active: activeFlag(meta), meta };
+      const values = {
+        id,
+        projectId: env.PROJECT_ID,
+        name: meta.name ?? null,
+        userId: meta.userid ?? null,
+        active: activeFlag(meta),
+        meta,
+      };
       await db
         .insert(cameraUsers)
         .values(values)
@@ -51,7 +64,14 @@ export function createSupabaseStore(env: Env): RecordingStore {
     },
 
     async upsertDevice(serial, meta) {
-      const values = { serial, name: meta.name ?? null, model: meta.model ?? null, active: activeFlag(meta), meta };
+      const values = {
+        serial,
+        projectId: env.PROJECT_ID,
+        name: meta.name ?? null,
+        model: meta.model ?? null,
+        active: activeFlag(meta),
+        meta,
+      };
       await db
         .insert(devices)
         .values(values)
@@ -67,6 +87,7 @@ export function createSupabaseStore(env: Env): RecordingStore {
         .insert(recordings)
         .values({
           name: recording.name,
+          projectId: env.PROJECT_ID,
           userId: recording.userId,
           deviceSerial: recording.deviceSerial,
           status,

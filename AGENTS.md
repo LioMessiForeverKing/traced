@@ -36,6 +36,12 @@ Do not infer scope from folder names. If a ticket does not say it, it is not in 
 **Data** — Supabase, with Drizzle over raw queries. RLS on every table. The service-role key
 never leaves the server. Config lives in `.env.local`, never in the repo.
 
+**Access** — policies live in `src/db/schema.ts` as `pgPolicy`, not in hand-written SQL, so the
+schema stays the single source of truth. Every table gets one `SELECT` policy for `authenticated`,
+gated on project membership; nothing browser-facing writes, so there are no write policies to add
+without a decision to change that. `npm run test:rls` proves them against the real project and is
+the gate before any policy change ships.
+
 **The Axis protocol** — `src/app.ts` is the wire. The spec is
 `github.com/AxisCommunications/body-worn-integration-api`. Change the wire only with the spec open.
 
