@@ -68,10 +68,14 @@ async function seedSite(name: "a" | "b"): Promise<void> {
 
 beforeAll(async () => {
   await createAccount("alice");
+  await createAccount("viewer");
   await createAccount("outsider");
   await seedSite("a");
   await seedSite("b");
-  await db`insert into project_members (project_id, user_id) values (${site.a}, ${account.alice.id})`;
+  await db`
+    insert into project_members (project_id, user_id, role)
+    values (${site.a}, ${account.alice.id}, 'member'), (${site.a}, ${account.viewer.id}, 'viewer')
+  `;
 });
 
 afterAll(async () => {
@@ -98,6 +102,13 @@ describe("recordings bucket", () => {
   it("refuses a member a url for another project's clip", async () => {
     const alice = await signIn("alice");
     const { data, error } = await alice.storage.from(bucket).createSignedUrl(clipPath.b, 60);
+    expect(data).toBeNull();
+    expect(error).toBeTruthy();
+  });
+
+  it("refuses an insurance viewer of the very same project", async () => {
+    const viewer = await signIn("viewer");
+    const { data, error } = await viewer.storage.from(bucket).createSignedUrl(clipPath.a, 60);
     expect(data).toBeNull();
     expect(error).toBeTruthy();
   });

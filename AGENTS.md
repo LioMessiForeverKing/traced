@@ -42,6 +42,11 @@ gated on project membership; nothing browser-facing writes, so there are no writ
 without a decision to change that. `npm run test:rls` proves them against the real project and is
 the gate before any policy change ships.
 
+`project_members.role` is `member` or `viewer` — the contractor and the insurance side. A new
+table gets `memberOf`, the member-only predicate, and only a deliberate decision widens it to
+`accessTo`. That direction is the safety property: a table nobody thought about shows an insurer
+too little, never too much.
+
 **The Axis protocol** — `src/app.ts` is the wire. The spec is
 `github.com/AxisCommunications/body-worn-integration-api`. Change the wire only with the spec open.
 

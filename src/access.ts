@@ -1,21 +1,24 @@
 import { randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { authUsers } from "drizzle-orm/supabase";
 import { createDb } from "./db/client.js";
-import { projectMembers, projects } from "./db/schema.js";
+import { type ProjectRole, projectMembers, projects } from "./db/schema.js";
 import type { Env } from "./env.js";
 
 export interface GrantRequest {
   email: string;
   projectId?: string;
   password?: string;
+  role?: ProjectRole;
 }
 
 export interface Grant {
   project: { id: string; name: string };
   user: { id: string; email: string; created: boolean };
   membershipCreated: boolean;
+  role: ProjectRole;
+  previousRole: ProjectRole | null;
   password: string | null;
 }
 
@@ -28,6 +31,7 @@ export async function grantAccess(env: Env, request: GrantRequest): Promise<Gran
   if (!email.includes("@")) throw new Error(`not an email address: ${request.email}`);
 
   const projectId = request.projectId ?? env.PROJECT_ID;
+  const role = request.role ?? "member";
   const db = createDb(env.DATABASE_URL);
   const admin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
@@ -58,16 +62,25 @@ export async function grantAccess(env: Env, request: GrantRequest): Promise<Gran
       userId = data.user.id;
     }
 
-    const inserted = await db
+    const [membership] = await db
+      .select({ role: projectMembers.role })
+      .from(projectMembers)
+      .where(and(eq(projectMembers.projectId, project.id), eq(projectMembers.userId, userId)));
+
+    await db
       .insert(projectMembers)
-      .values({ projectId: project.id, userId })
-      .onConflictDoNothing()
-      .returning({ userId: projectMembers.userId });
+      .values({ projectId: project.id, userId, role })
+      .onConflictDoUpdate({
+        target: [projectMembers.projectId, projectMembers.userId],
+        set: { role, updatedAt: new Date() },
+      });
 
     return {
       project,
       user: { id: userId, email, created: password !== null },
-      membershipCreated: inserted.length > 0,
+      membershipCreated: membership === undefined,
+      role,
+      previousRole: membership && membership.role !== role ? membership.role : null,
       password,
     };
   } finally {
