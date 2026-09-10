@@ -76,6 +76,14 @@ the cameras are `camera_users`, an Axis identity with no login and no relation t
 `recording_objects` and `recording_events` carry no `project_id`. They reach a project through
 their recording, so a clip can never disagree with the recording it belongs to.
 
+The video itself is governed the same way. The `recordings` bucket is private and `storage.objects`
+carries one `SELECT` policy for members, keyed on the storage path — an object lives at
+`<recording_name>/<file>`, so `storage.foldername(name)` yields the recording and the same
+`is_recording_member` answers for the bytes as for the rows. A member therefore mints their own
+signed URL straight from the browser with the publishable key; there is no endpoint in between and
+the service-role key never reaches the dashboard. Listing the bucket is filtered by the same policy,
+so a member sees only their own recordings' folders.
+
 Both policy predicates go through `SECURITY DEFINER` functions — `is_project_member(uuid)` and
 `is_recording_member(text)`. A policy that queried `project_members` directly would have its own
 subquery filtered by that table's policy, and recurse.
@@ -84,12 +92,20 @@ subquery filtered by that table's policy, and recurse.
 npm run test:rls
 ```
 
-That suite runs against the real project: it creates two throwaway projects, three real auth users,
-seeds a recording in each project, then reads every table as each user with `SET ROLE authenticated`
-and a `request.jwt.claims` subject. It asserts a member sees their own site and nothing of the
-other, a signed-in non-member sees zero rows, an anonymous visitor sees zero rows, and a member's
-`INSERT` is refused. It deletes its fixtures and its auth users afterwards. It is not in CI,
-because it needs live credentials — run it before deploying a policy change.
+That suite runs against the real project, in two halves.
+
+`test/rls.live.test.ts` covers the tables: two throwaway projects, three real auth users, a
+recording seeded in each, then every table read as each user with `SET ROLE authenticated` and a
+`request.jwt.claims` subject. A member sees their own site and nothing of the other, a signed-in
+non-member sees zero rows, an anonymous visitor sees zero rows, a member's `INSERT` is refused.
+
+`test/storage.live.test.ts` covers the bytes, and takes the path a browser actually takes: it signs
+in with `SUPABASE_PUBLISHABLE_KEY` to get a real session, mints a signed URL, and streams it. A
+member gets their clip's bytes; the same member is refused a URL for another project's clip; a
+non-member and an anonymous visitor are refused; listing shows only reachable folders.
+
+Both delete their fixtures and auth users afterwards. Neither is in CI, because both need live
+credentials — run them before deploying a policy change.
 
 ## Verify
 
