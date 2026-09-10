@@ -58,6 +58,16 @@ the row, pulls scene-change frames out of the clip with ffmpeg, sends them to Op
 timestamped rows into `recording_events`. The claim is a `FOR UPDATE SKIP LOCKED` on the recording,
 so the loop can move into its own process later without any of this code changing.
 
+Frames are chosen two ways at once, and the first one is what makes a long recording work.
+`ANALYSIS_MAX_FRAMES` is divided into the clip's duration to give a sampling interval, and a frame
+is taken whenever that interval has elapsed since the last one — so a two-hour recording is covered
+end to end rather than densely at the start. On top of that, any scene change above
+`ANALYSIS_SCENE_THRESHOLD` also takes a frame, which adds detail wherever the view actually changes.
+
+That split matters because body worn footage is one continuous shot from a moving camera and never
+cuts. Scene detection alone finds nothing in it: at the default threshold a 17-second clip yielded a
+single frame, and so would a two-hour one.
+
 Tune it with `ANALYSIS_MAX_FRAMES`, `ANALYSIS_SCENE_THRESHOLD`, `ANALYSIS_FRAME_WIDTH` and
 `ANALYSIS_POLL_MS`. Frame budget is the cost lever: frames dominate the bill. `OPENAI_MODEL`
 defaults to `gpt-5.5`; drop to a smaller model for volume without touching code.

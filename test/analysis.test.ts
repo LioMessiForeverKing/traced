@@ -67,16 +67,31 @@ afterAll(async () => {
 });
 
 describe("sampling frames out of a clip", () => {
-  it("returns one frame per scene change, timestamped, as jpeg", async () => {
+  it("returns a frame at every scene change, timestamped, as jpeg", async () => {
     const frames = await sampleFrames(threeScenes, SAMPLE);
+    const offsets = frames.map((frame) => Math.round(frame.offsetSeconds));
 
-    expect(frames).toHaveLength(3);
-    expect(frames.map((frame) => Math.round(frame.offsetSeconds))).toEqual([0, 2, 4]);
+    expect(offsets).toEqual(expect.arrayContaining([0, 2, 4]));
+    expect(offsets).toEqual([...offsets].sort((a, b) => a - b));
     for (const frame of frames) {
       expect(frame.jpeg.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
       expect(frame.jpeg.byteLength).toBeGreaterThan(0);
     }
   }, 60_000);
+
+  it("keeps sampling a clip that never cuts, rather than stopping at the first frame", async () => {
+    const still = join(fixtureDir, "still.mp4");
+    await ffmpeg([
+      "-hide_banner", "-loglevel", "error",
+      "-f", "lavfi", "-i", "smptebars=size=320x240:rate=10:duration=20",
+      "-pix_fmt", "yuv420p", still,
+    ]);
+
+    const frames = await sampleFrames(still, SAMPLE);
+
+    expect(frames.length).toBeGreaterThan(1);
+    expect(frames.at(-1)!.offsetSeconds).toBeGreaterThan(12);
+  }, 120_000);
 
   it("never returns more frames than the cap, and always keeps the first", async () => {
     const busy = join(fixtureDir, "busy.mp4");
@@ -155,7 +170,7 @@ describe("a complete recording becoming events", () => {
     expect(await loop.runOnce()).toBe(offloaded.recordingName);
 
     expect(seen).toHaveLength(1);
-    expect(seen[0]!.frames).toHaveLength(3);
+    expect(seen[0]!.frames.length).toBeGreaterThanOrEqual(3);
     expect(seen[0]!.startTime?.toISOString()).toBe("2026-09-08T17:11:39.000Z");
 
     const events = store.events.get(offloaded.recordingName);
@@ -163,8 +178,14 @@ describe("a complete recording becoming events", () => {
     expect(events![0]).toMatchObject({ offsetSeconds: 0, system: null, zone: null, description: "Worker enters the floor" });
     expect(events![0]!.occurredAt?.toISOString()).toBe("2026-09-08T17:11:39.000Z");
     expect(events![1]).toMatchObject({ system: "Framing", zone: "Level 3 East", confidence: 0.8 });
-    expect(events![1]!.frameOffsets.map(Math.round)).toEqual([2, 4]);
-    expect(events![1]!.occurredAt?.toISOString()).toBe("2026-09-08T17:11:41.000Z");
+    expect(events![1]!.frameOffsets).toEqual([
+      seen[0]!.frames[1]!.offsetSeconds,
+      seen[0]!.frames[2]!.offsetSeconds,
+    ]);
+    const firstCited = seen[0]!.frames[1]!.offsetSeconds;
+    expect(events![1]!.occurredAt?.getTime()).toBe(
+      seen[0]!.startTime!.getTime() + firstCited * 1000,
+    );
 
     const recording = store.recordings.get(offloaded.recordingName);
     expect(recording?.analysisStatus).toBe("done");

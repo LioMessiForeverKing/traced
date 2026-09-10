@@ -39,6 +39,10 @@ The wider picture is in `Projects/Traced.md`; the design language with real toke
   analysis claim, the signed clip URL and the event writeback all executed against real Postgres.
   The tests still drive an in-memory store, so **CI still proves nothing about this file** — but it
   is no longer untried code.
+- **Frame sampling covers the whole clip, not just its start.** Scene detection alone finds nothing
+  in body worn footage, which never cuts — at the default threshold any clip, 17 seconds or two
+  hours, yielded exactly one frame. `frames.ts` now also takes a frame every `duration/maxFrames`
+  seconds. Proven 2026-09-10: a 10-minute continuous clip went from 1 frame to 24 spanning 0–575s.
 - **`src/analysis/extractor.ts` has run against the real OpenAI API**, end to end through the whole
   slice, on 2026-09-09. What it has never seen is real construction footage — only synthetic test
   video, where an empty event list is the right answer. The tests still inject a stub on purpose;
