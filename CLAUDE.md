@@ -39,6 +39,9 @@ The wider picture is in `Projects/Traced.md`; the design language with real toke
   analysis claim, the signed clip URL and the event writeback all executed against real Postgres.
   The tests still drive an in-memory store, so **CI still proves nothing about this file** — but it
   is no longer untried code.
+- **A failed analysis retries three times, ten minutes apart**, counted in
+  `recordings.analysis_attempts`. The clip is rarely what failed; an outage marks a recording failed
+  while its footage is intact, and before this that lost a shift permanently.
 - **Frame sampling covers the whole clip, not just its start.** Scene detection alone finds nothing
   in body worn footage, which never cuts — at the default threshold any clip, 17 seconds or two
   hours, yielded exactly one frame. `frames.ts` now also takes a frame every `duration/maxFrames`

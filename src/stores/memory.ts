@@ -1,7 +1,16 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AnalysisClaim, AnalysisEvent, Meta, PutObjectInput, RecordingName, RecordingStore } from "../store.js";
+import {
+  MAX_ANALYSIS_ATTEMPTS,
+  RETRY_AFTER_MS,
+  type AnalysisClaim,
+  type AnalysisEvent,
+  type Meta,
+  type PutObjectInput,
+  type RecordingName,
+  type RecordingStore,
+} from "../store.js";
 import { metaTime, recordingStatus } from "../swift.js";
 
 export interface MemoryRecording extends RecordingName {
@@ -9,6 +18,7 @@ export interface MemoryRecording extends RecordingName {
   meta: Meta;
   completedAt: Date | null;
   analysisStatus: string;
+  analysisAttempts: number;
   analysisError: string | null;
   analysedAt: Date | null;
 }
@@ -58,6 +68,7 @@ export class MemoryStore implements RecordingStore {
       meta,
       completedAt: null,
       analysisStatus: "pending",
+      analysisAttempts: 0,
       analysisError: null,
       analysedAt: null,
     });
@@ -100,9 +111,16 @@ export class MemoryStore implements RecordingStore {
     return true;
   }
 
-  async claimForAnalysis(): Promise<AnalysisClaim | null> {
+  async claimForAnalysis(now = new Date()): Promise<AnalysisClaim | null> {
+    const retryFrom = now.getTime() - RETRY_AFTER_MS;
     for (const recording of this.recordings.values()) {
-      if (recording.status !== "complete" || recording.analysisStatus !== "pending") continue;
+      if (recording.status !== "complete") continue;
+      const retryable =
+        recording.analysisStatus === "failed" &&
+        recording.analysisAttempts < MAX_ANALYSIS_ATTEMPTS &&
+        recording.analysedAt !== null &&
+        recording.analysedAt.getTime() <= retryFrom;
+      if (recording.analysisStatus !== "pending" && !retryable) continue;
       recording.analysisStatus = "running";
       return { name: recording.name, startTime: metaTime(recording.meta, "starttime") };
     }
@@ -133,6 +151,7 @@ export class MemoryStore implements RecordingStore {
     const existing = this.recordings.get(recording);
     if (!existing) return;
     existing.analysisStatus = "failed";
+    existing.analysisAttempts += 1;
     existing.analysisError = reason;
     existing.analysedAt = new Date();
   }

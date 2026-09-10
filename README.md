@@ -68,6 +68,13 @@ That split matters because body worn footage is one continuous shot from a movin
 cuts. Scene detection alone finds nothing in it: at the default threshold a 17-second clip yielded a
 single frame, and so would a two-hour one.
 
+A failed analysis is retried. `analysis_attempts` counts every failure, and the claim query picks a
+failed recording back up once ten minutes have passed, up to three attempts. That matters because
+the clip is never the thing that failed — an OpenAI outage, a network blip or a timeout all mark a
+recording failed while its footage sits intact in Storage, and before this a transient error lost a
+shift permanently. After three attempts it stays failed rather than retrying a genuinely broken clip
+forever.
+
 Tune it with `ANALYSIS_MAX_FRAMES`, `ANALYSIS_SCENE_THRESHOLD`, `ANALYSIS_FRAME_WIDTH` and
 `ANALYSIS_POLL_MS`. Frame budget is the cost lever: frames dominate the bill. `OPENAI_MODEL`
 defaults to `gpt-5.5`; drop to a smaller model for volume without touching code.
