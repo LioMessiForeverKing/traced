@@ -12,6 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "connection-file": "tsx --env-file-if-exists=.env.local scripts/connection-file.ts",
     "fake-w800": "tsx --env-file-if-exists=.env.local scripts/fake-w800.ts",
+    "grant-access": "tsx --env-file-if-exists=.env.local scripts/grant-access.ts",
     "audit:comments": "python3 scripts/comment-audit.py src scripts test --quiet"
   },
   "license": "UNLICENSED",
