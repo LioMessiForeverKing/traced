@@ -45,8 +45,11 @@ export interface AnalysisClaim {
   startTime: Date | null;
 }
 
+export const MAX_ANALYSIS_ATTEMPTS = 3;
+export const RETRY_AFTER_MS = 10 * 60 * 1000;
+
 export interface AnalysisStore {
-  claimForAnalysis(): Promise<AnalysisClaim | null>;
+  claimForAnalysis(now?: Date): Promise<AnalysisClaim | null>;
   clipSource(recording: string): Promise<string | null>;
   finishAnalysis(recording: string, events: AnalysisEvent[]): Promise<void>;
   failAnalysis(recording: string, reason: string): Promise<void>;

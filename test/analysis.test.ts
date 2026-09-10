@@ -8,6 +8,7 @@ import { createApp } from "../src/app.js";
 import { createAnalysisLoop, toAnalysisEvents } from "../src/analysis/loop.js";
 import type { EventExtractor, ExtractedEvent, ExtractInput } from "../src/analysis/extractor.js";
 import { redactUrls, sampleFrames } from "../src/analysis/frames.js";
+import { MAX_ANALYSIS_ATTEMPTS, RETRY_AFTER_MS } from "../src/store.js";
 import { MemoryStore } from "../src/stores/memory.js";
 import { runFakeW800 } from "../src/testing/fake-w800.js";
 import { CREDS, PUBLIC_URL } from "./credentials.js";
@@ -296,5 +297,66 @@ describe("mapping what the model said onto the frames it saw", () => {
     );
 
     expect(events[0]!.occurredAt).toBeNull();
+  });
+});
+
+describe("retrying a failed analysis", () => {
+  const RECORDING = "retry-me";
+
+  async function failedRecording(attempts: number, analysedAt: Date) {
+    const store = new MemoryStore();
+    await store.createRecording(
+      { name: RECORDING, userId: null, deviceSerial: null, triggerOnTime: null, rejected: false },
+      { status: "complete" },
+    );
+    const recording = store.recordings.get(RECORDING)!;
+    recording.status = "complete";
+    recording.analysisStatus = "failed";
+    recording.analysisAttempts = attempts;
+    recording.analysedAt = analysedAt;
+    return store;
+  }
+
+  it("claims a failed recording again once the backoff has passed", async () => {
+    const now = new Date("2026-09-10T12:00:00Z");
+    const store = await failedRecording(1, new Date(now.getTime() - RETRY_AFTER_MS - 1_000));
+
+    expect(await store.claimForAnalysis(now)).toMatchObject({ name: RECORDING });
+  });
+
+  it("leaves it alone until the backoff has passed", async () => {
+    const now = new Date("2026-09-10T12:00:00Z");
+    const store = await failedRecording(1, new Date(now.getTime() - 60_000));
+
+    expect(await store.claimForAnalysis(now)).toBeNull();
+  });
+
+  it("gives up after the attempt cap, rather than retrying a broken clip forever", async () => {
+    const now = new Date("2026-09-10T12:00:00Z");
+    const store = await failedRecording(
+      MAX_ANALYSIS_ATTEMPTS,
+      new Date(now.getTime() - RETRY_AFTER_MS - 1_000),
+    );
+
+    expect(await store.claimForAnalysis(now)).toBeNull();
+  });
+
+  it("counts every failure, so the cap is reachable", async () => {
+    const store = await failedRecording(0, new Date(0));
+    await store.failAnalysis(RECORDING, "ffmpeg fell over");
+    await store.failAnalysis(RECORDING, "ffmpeg fell over again");
+
+    expect(store.recordings.get(RECORDING)!.analysisAttempts).toBe(2);
+  });
+
+  it("still claims a pending recording without waiting for any backoff", async () => {
+    const store = new MemoryStore();
+    await store.createRecording(
+      { name: "fresh", userId: null, deviceSerial: null, triggerOnTime: null, rejected: false },
+      { status: "complete" },
+    );
+    store.recordings.get("fresh")!.status = "complete";
+
+    expect(await store.claimForAnalysis(new Date())).toMatchObject({ name: "fresh" });
   });
 });

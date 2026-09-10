@@ -1,0 +1,1 @@
+ALTER TABLE "recordings" ADD COLUMN "analysis_attempts" integer DEFAULT 0 NOT NULL;

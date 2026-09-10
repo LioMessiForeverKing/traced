@@ -1,10 +1,19 @@
 import { createClient } from "@supabase/supabase-js";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, lte, or, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { createDb } from "../db/client.js";
 import { bwsSystems, cameraUsers, devices, recordingEvents, recordingObjects, recordings } from "../db/schema.js";
 import type { Env } from "../env.js";
-import type { AnalysisClaim, AnalysisEvent, Meta, PutObjectInput, RecordingName, RecordingStore } from "../store.js";
+import {
+  MAX_ANALYSIS_ATTEMPTS,
+  RETRY_AFTER_MS,
+  type AnalysisClaim,
+  type AnalysisEvent,
+  type Meta,
+  type PutObjectInput,
+  type RecordingName,
+  type RecordingStore,
+} from "../store.js";
 import { metaTime, recordingStatus } from "../swift.js";
 
 function activeFlag(meta: Meta): boolean | null {
@@ -171,11 +180,24 @@ export function createSupabaseStore(env: Env): RecordingStore {
       return rows.length > 0;
     },
 
-    async claimForAnalysis(): Promise<AnalysisClaim | null> {
+    async claimForAnalysis(now = new Date()): Promise<AnalysisClaim | null> {
+      const retryFrom = new Date(now.getTime() - RETRY_AFTER_MS);
       const next = db
         .select({ name: recordings.name })
         .from(recordings)
-        .where(and(eq(recordings.status, "complete"), eq(recordings.analysisStatus, "pending")))
+        .where(
+          and(
+            eq(recordings.status, "complete"),
+            or(
+              eq(recordings.analysisStatus, "pending"),
+              and(
+                eq(recordings.analysisStatus, "failed"),
+                lt(recordings.analysisAttempts, MAX_ANALYSIS_ATTEMPTS),
+                lte(recordings.analysedAt, retryFrom),
+              ),
+            ),
+          ),
+        )
         .orderBy(asc(recordings.completedAt))
         .limit(1)
         .for("update", { skipLocked: true });
@@ -229,7 +251,13 @@ export function createSupabaseStore(env: Env): RecordingStore {
     async failAnalysis(recording, reason) {
       await db
         .update(recordings)
-        .set({ analysisStatus: "failed", analysisError: reason, analysedAt: new Date(), updatedAt: new Date() })
+        .set({
+          analysisStatus: "failed",
+          analysisError: reason,
+          analysisAttempts: sql`${recordings.analysisAttempts} + 1`,
+          analysedAt: new Date(),
+          updatedAt: new Date(),
+        })
         .where(eq(recordings.name, recording));
     },
   };

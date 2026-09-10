@@ -36,6 +36,13 @@
       "when": 1789047452107,
       "tag": "0004_recordings_storage_access",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789065992472,
+      "tag": "0005_analysis_attempts",
+      "breakpoints": true
     }
   ]
 }
