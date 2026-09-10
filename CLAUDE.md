@@ -47,6 +47,9 @@ The wider picture is in `Projects/Traced.md`; the design language with real toke
   membership of the row's project. There are no write policies: the browser reads, the intake
   writes with the service-role key. Proven on 2026-09-09 against the real project by
   `npm run test:rls`, which is not in CI because it needs live credentials.
+- **The browser mints its own signed clip URL.** `storage.objects` has a member-only `SELECT`
+  policy keyed on the storage path, so the dashboard needs no server endpoint for playback and
+  never holds the service-role key. Proven 2026-09-10 through a real signed-in session.
 - **`PROJECT_ID` is configuration, not protocol.** The Axis wire format carries no notion of a
   site, so the intake stamps its own project onto every row it writes. One deployment, one W800,
   one site.
