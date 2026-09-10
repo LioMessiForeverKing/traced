@@ -62,6 +62,24 @@ Tune it with `ANALYSIS_MAX_FRAMES`, `ANALYSIS_SCENE_THRESHOLD`, `ANALYSIS_FRAME_
 `ANALYSIS_POLL_MS`. Frame budget is the cost lever: frames dominate the bill. `OPENAI_MODEL`
 defaults to `gpt-5.5`; drop to a smaller model for volume without touching code.
 
+## Let a person in
+
+Nothing browser-facing works until a real account is a member of a project. `auth.users` starts
+empty, and a member of nothing sees nothing.
+
+```bash
+npm run grant-access -- someone@example.com
+```
+
+Creates the Supabase Auth account if it does not exist, adds it to `PROJECT_ID` — the project this
+intake is stamping onto everything it writes, so the new member can see the footage that is
+actually here — and prints the generated password once. Pass a different project id as a second
+argument to use another one, or set `GRANT_PASSWORD` to choose the password instead of having one
+generated. Running it twice is safe and changes nothing.
+
+It does not create projects. A new site is one `insert into projects (name) values ('...')`, and
+its id is what you pass as the second argument.
+
 ## Who can read what
 
 Every table has RLS on and exactly one policy: `SELECT`, `TO authenticated`, allowed only for
@@ -104,8 +122,13 @@ in with `SUPABASE_PUBLISHABLE_KEY` to get a real session, mints a signed URL, an
 member gets their clip's bytes; the same member is refused a URL for another project's clip; a
 non-member and an anonymous visitor are refused; listing shows only reachable folders.
 
-Both delete their fixtures and auth users afterwards. Neither is in CI, because both need live
-credentials — run them before deploying a policy change.
+`test/access.live.test.ts` covers `grant-access` end to end: it grants a fresh account, signs in
+with the password it handed back, and reads the project's recordings and events through the
+publishable key. It also asserts a second run changes nothing and that an unknown project is
+refused.
+
+All three delete their fixtures and auth users afterwards. None is in CI, because they need live
+credentials — run them before deploying a policy or access change.
 
 ## Verify
 
