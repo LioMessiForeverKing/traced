@@ -43,8 +43,13 @@ The wider picture is in `Projects/Traced.md`; the design language with real toke
   slice, on 2026-09-09. What it has never seen is real construction footage — only synthetic test
   video, where an empty event list is the right answer. The tests still inject a stub on purpose;
   a test suite must not spend money.
-- **RLS is on with no policies**, so only the service role reads anything. Correct today; it blocks
-  everything browser-facing until the policies are designed.
+- **RLS is on, and every table now has one `SELECT` policy** for `authenticated`, gated on
+  membership of the row's project. There are no write policies: the browser reads, the intake
+  writes with the service-role key. Proven on 2026-09-09 against the real project by
+  `npm run test:rls`, which is not in CI because it needs live credentials.
+- **`PROJECT_ID` is configuration, not protocol.** The Axis wire format carries no notion of a
+  site, so the intake stamps its own project onto every row it writes. One deployment, one W800,
+  one site.
 - Nothing has touched real hardware. Every protocol detail was read from the specification at
   `github.com/AxisCommunications/body-worn-integration-api`.
 

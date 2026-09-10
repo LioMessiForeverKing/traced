@@ -12,6 +12,7 @@ const schema = z
     CD_USERNAME: z.string().min(1),
     CD_PASSWORD: z.string().min(8),
     CD_TOKEN_SECRET: z.string().min(16),
+    PROJECT_ID: z.uuid(),
     SUPABASE_URL: z.url(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
     DATABASE_URL: z.string().min(1),

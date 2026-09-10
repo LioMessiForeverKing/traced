@@ -8,6 +8,7 @@
     "start": "tsx --env-file-if-exists=.env.local src/index.ts",
     "typecheck": "tsc --noEmit",
     "test:watch": "vitest",
+    "test:rls": "vitest run --config vitest.rls.config.ts",
     "db:generate": "drizzle-kit generate",
     "connection-file": "tsx --env-file-if-exists=.env.local scripts/connection-file.ts",
     "fake-w800": "tsx --env-file-if-exists=.env.local scripts/fake-w800.ts",
