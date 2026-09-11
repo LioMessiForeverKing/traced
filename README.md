@@ -1,5 +1,14 @@
 # Traced
 
+> ### 📕 Have the hardware? Read [**docs/OPERATOR.md**](docs/OPERATOR.md) first, not this file.
+>
+> That is the runbook: a W800, a docking station and a camera, from an empty Supabase project to a
+> docked camera whose footage lands in the record. It opens with the one irreversible step in the
+> procedure — **a body worn system locks to a content destination the moment it accepts one** — and
+> this README does not. Getting the order wrong costs a factory reset of the entire system.
+>
+> This README is for the person changing the code.
+
 A content destination for Axis body worn cameras. A worker wears the camera in a vest; when the
 camera docks, the AXIS W800 system controller pushes every recording here, and it lands in
 Supabase — the clip in Storage, the who/when/where in Postgres.
@@ -28,8 +37,16 @@ local use; a real deployment inserts its own row in `projects` and points `PROJE
 npm run connection-file           # writes traced-connection.json
 ```
 
-Upload that file in AXIS Body Worn Manager under **Content destination**. From then on, every
-docked camera offloads to this service.
+Upload that file in AXIS Body Worn Manager. From then on, every docked camera offloads to this
+service.
+
+Do not do that from this section alone. **A body worn system locks to a content destination the
+moment it accepts one**, and changing it afterwards means factory-resetting the whole system — so
+the order of operations matters more than the command does. [docs/OPERATOR.md](docs/OPERATOR.md)
+has that order, the network prerequisites the file's `CD_PUBLIC_URL` depends on, and what every
+field in the file means.
+
+The file carries `CD_PASSWORD` in clear text. Treat it as a secret.
 
 ## Prove it without a camera
 
@@ -191,8 +208,10 @@ npm run audit:comments
 
 ## Known limits of this slice
 
-- HTTP only. The connection file carries no certificate, which the Axis spec allows for
-  development and warns against for production. TLS is the next slice.
+- HTTP only. The connection file carries no `HTTPSCertificate` field, which the Axis spec allows
+  for development and warns against for production. TLS is the next slice. **Whether a shipping
+  W800 will accept a plain-HTTP content destination at all is untested**, and if it refuses, TLS
+  blocks every hardware test.
 - No content encryption (`WantEncryption: false`).
 - Supabase Storage on the free plan caps a single upload at 50 MB. Long clips will 500 until the
   plan or the upload path changes.
