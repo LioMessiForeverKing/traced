@@ -50,10 +50,14 @@ The wider picture is in `Projects/Traced.md`; the design language with real toke
   slice, on 2026-09-09. What it has never seen is real construction footage — only synthetic test
   video, where an empty event list is the right answer. The tests still inject a stub on purpose;
   a test suite must not spend money.
-- **RLS is on, and every table now has one `SELECT` policy** for `authenticated`, gated on
-  membership of the row's project. There are no write policies: the browser reads, the intake
-  writes with the service-role key. Proven on 2026-09-09 against the real project by
-  `npm run test:rls`, which is not in CI because it needs live credentials.
+- **RLS is on, and every table has one `SELECT` policy** for `authenticated`, gated on membership
+  of the row's project. `project_members.role` is `member` or `viewer`: a member is the contractor
+  and reads everything, a viewer is the insurance side and reads `projects`, `recordings` and
+  `recording_events` only — never the clip bytes, the workers or the roster. The member-only
+  predicate is the default, so a table nobody widened shows a viewer too little rather than too
+  much. There are no write policies: the browser reads, the intake writes with the service-role
+  key. Proven 2026-09-10 against the real project by `npm run test:rls`, which is not in CI
+  because it needs live credentials.
 - **The browser mints its own signed clip URL.** `storage.objects` has a member-only `SELECT`
   policy keyed on the storage path, so the dashboard needs no server endpoint for playback and
   never holds the service-role key. Proven 2026-09-10 through a real signed-in session.

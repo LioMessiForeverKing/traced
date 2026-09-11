@@ -94,19 +94,43 @@ actually here — and prints the generated password once. Pass a different proje
 argument to use another one, or set `GRANT_PASSWORD` to choose the password instead of having one
 generated. Running it twice is safe and changes nothing.
 
+```bash
+npm run grant-access -- insurance@example.com --role viewer
+```
+
+`--role viewer` grants the insurance side instead — the same account machinery, a different lens,
+described below. Re-running with a different role changes it and says so: `previousRole` in the
+output names the role it replaced, so nobody is quietly downgraded.
+
 It does not create projects. A new site is one `insert into projects (name) values ('...')`, and
 its id is what you pass as the second argument.
 
 ## Who can read what
 
-Every table has RLS on and exactly one policy: `SELECT`, `TO authenticated`, allowed only for
-members of the row's project. There are no `INSERT`, `UPDATE` or `DELETE` policies anywhere,
-because the browser never writes — the intake holds the service-role key and writes everything,
-and the service role bypasses RLS. A dashboard bug therefore cannot alter evidence.
+Every table has RLS on and exactly one policy: `SELECT`, `TO authenticated`, allowed only to
+someone with a `project_members` row for the project. There are no `INSERT`, `UPDATE` or `DELETE`
+policies anywhere, because the browser never writes — the intake holds the service-role key and
+writes everything, and the service role bypasses RLS. A dashboard bug therefore cannot alter
+evidence.
 
-Membership is flat. A row in `project_members` means you see that project's recordings, clips,
-events, devices, camera users and controllers; no row means you see nothing at all. Workers wearing
-the cameras are `camera_users`, an Axis identity with no login and no relation to `auth.users`.
+That row carries a `role`, and there are two of them. A `member` is the contractor and sees the
+project whole. A `viewer` is the insurance side and sees the record of the work, not the site
+around it. No row at all still means no rows at all.
+
+| | `member` | `viewer` |
+|---|---|---|
+| `projects`, `recordings`, `recording_events` | yes | yes |
+| `camera_users`, `devices`, `bws_systems`, `project_members` | yes | no |
+| `recording_objects`, and the clip bytes | yes | no |
+
+An insurer is buying the record, not the footage. Body worn video carries the faces and voices of
+the workers wearing it, and an underwriter has no reason to watch a shift — so a viewer never
+reaches `storage.objects` and cannot mint a signed URL at all. Releasing one clip for one disputed
+claim is a call the contractor makes, and there is no mechanism for it yet. Worker names live in
+`camera_users` and stay on the contractor's side for the same reason.
+
+Workers wearing the cameras are `camera_users`, an Axis identity with no login and no relation to
+`auth.users`.
 
 `recording_objects` and `recording_events` carry no `project_id`. They reach a project through
 their recording, so a clip can never disagree with the recording it belongs to.
@@ -119,9 +143,16 @@ signed URL straight from the browser with the publishable key; there is no endpo
 the service-role key never reaches the dashboard. Listing the bucket is filtered by the same policy,
 so a member sees only their own recordings' folders.
 
-Both policy predicates go through `SECURITY DEFINER` functions — `is_project_member(uuid)` and
-`is_recording_member(text)`. A policy that queried `project_members` directly would have its own
-subquery filtered by that table's policy, and recurse.
+All four policy predicates go through `SECURITY DEFINER` functions. A policy that queried
+`project_members` directly would have its own subquery filtered by that table's policy, and
+recurse. `is_project_member(uuid)` and `is_recording_member(text)` are true only for
+`role = 'member'`; `has_project_access(uuid)` and `has_recording_access(text)` are true for either
+role.
+
+The split runs that way round deliberately. The member-only predicate is the one a table keeps by
+default, so a table nobody has thought about shows a viewer nothing until someone widens it on
+purpose — the failure is an insurer seeing too little, never too much. `storage.objects` needed no
+edit at all to stay shut.
 
 ```bash
 npm run test:rls
@@ -129,20 +160,23 @@ npm run test:rls
 
 That suite runs against the real project, in two halves.
 
-`test/rls.live.test.ts` covers the tables: two throwaway projects, three real auth users, a
+`test/rls.live.test.ts` covers the tables: two throwaway projects, four real auth users, a
 recording seeded in each, then every table read as each user with `SET ROLE authenticated` and a
-`request.jwt.claims` subject. A member sees their own site and nothing of the other, a signed-in
-non-member sees zero rows, an anonymous visitor sees zero rows, a member's `INSERT` is refused.
+`request.jwt.claims` subject. A member sees their own site and nothing of the other, a viewer of
+the same site sees the record and none of the site around it, a signed-in non-member sees zero
+rows, an anonymous visitor sees zero rows, a member's `INSERT` is refused.
 
 `test/storage.live.test.ts` covers the bytes, and takes the path a browser actually takes: it signs
 in with `SUPABASE_PUBLISHABLE_KEY` to get a real session, mints a signed URL, and streams it. A
 member gets their clip's bytes; the same member is refused a URL for another project's clip; a
-non-member and an anonymous visitor are refused; listing shows only reachable folders.
+viewer of that very project is refused; a non-member and an anonymous visitor are refused; listing
+shows only reachable folders.
 
 `test/access.live.test.ts` covers `grant-access` end to end: it grants a fresh account, signs in
 with the password it handed back, and reads the project's recordings and events through the
-publishable key. It also asserts a second run changes nothing and that an unknown project is
-refused.
+publishable key. It also asserts a second run changes nothing, that an unknown project is refused,
+that a `viewer` grant reads the events but not `camera_users`, and that changing a role reports the
+role it replaced.
 
 All three delete their fixtures and auth users afterwards. None is in CI, because they need live
 credentials — run them before deploying a policy or access change.

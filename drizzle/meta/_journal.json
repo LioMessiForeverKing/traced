@@ -43,6 +43,13 @@
       "when": 1789065992472,
       "tag": "0005_analysis_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789152392472,
+      "tag": "0006_viewer_role",
+      "breakpoints": true
     }
   ]
 }

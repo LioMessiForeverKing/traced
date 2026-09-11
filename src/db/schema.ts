@@ -3,6 +3,7 @@ import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   bigint,
   boolean,
+  check,
   doublePrecision,
   index,
   integer,
@@ -34,7 +35,15 @@ function memberOfRecording(recording: AnyPgColumn) {
   return sql`${signedIn} and public.is_recording_member(${recording})`;
 }
 
-function readableByMembers(name: string, predicate: SQL) {
+function accessTo(project: AnyPgColumn) {
+  return sql`${signedIn} and public.has_project_access(${project})`;
+}
+
+function accessToRecording(recording: AnyPgColumn) {
+  return sql`${signedIn} and public.has_recording_access(${recording})`;
+}
+
+function selectPolicy(name: string, predicate: SQL) {
   return pgPolicy(name, { as: "permissive", for: "select", to: authenticatedRole, using: predicate });
 }
 
@@ -50,8 +59,12 @@ export const projects = pgTable(
     name: text("name").notNull(),
     ...timestamps,
   },
-  (table) => [readableByMembers("projects_select_member", memberOf(table.id))],
+  (table) => [selectPolicy("projects_select_access", accessTo(table.id))],
 );
+
+export const projectRoles = ["member", "viewer"] as const;
+
+export type ProjectRole = (typeof projectRoles)[number];
 
 export const projectMembers = pgTable(
   "project_members",
@@ -60,11 +73,13 @@ export const projectMembers = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => authUsers.id, { onDelete: "cascade" }),
+    role: text("role").$type<ProjectRole>().notNull().default("member"),
     ...timestamps,
   },
   (table) => [
     primaryKey({ columns: [table.projectId, table.userId] }),
-    readableByMembers("project_members_select_member", memberOf(table.projectId)),
+    check("project_members_role", sql`${table.role} in ('member', 'viewer')`),
+    selectPolicy("project_members_select_member", memberOf(table.projectId)),
   ],
 );
 
@@ -78,7 +93,7 @@ export const bwsSystems = pgTable(
     meta: jsonb("meta").$type<Meta>().notNull(),
     ...timestamps,
   },
-  (table) => [readableByMembers("bws_systems_select_member", memberOf(table.projectId))],
+  (table) => [selectPolicy("bws_systems_select_member", memberOf(table.projectId))],
 ).enableRLS();
 
 export const cameraUsers = pgTable(
@@ -92,7 +107,7 @@ export const cameraUsers = pgTable(
     meta: jsonb("meta").$type<Meta>().notNull(),
     ...timestamps,
   },
-  (table) => [readableByMembers("camera_users_select_member", memberOf(table.projectId))],
+  (table) => [selectPolicy("camera_users_select_member", memberOf(table.projectId))],
 ).enableRLS();
 
 export const devices = pgTable(
@@ -106,7 +121,7 @@ export const devices = pgTable(
     meta: jsonb("meta").$type<Meta>().notNull(),
     ...timestamps,
   },
-  (table) => [readableByMembers("devices_select_member", memberOf(table.projectId))],
+  (table) => [selectPolicy("devices_select_member", memberOf(table.projectId))],
 ).enableRLS();
 
 export const recordings = pgTable(
@@ -133,7 +148,7 @@ export const recordings = pgTable(
   },
   (table) => [
     index("recordings_project_id").on(table.projectId),
-    readableByMembers("recordings_select_member", memberOf(table.projectId)),
+    selectPolicy("recordings_select_access", accessTo(table.projectId)),
   ],
 ).enableRLS();
 
@@ -156,7 +171,7 @@ export const recordingObjects = pgTable(
   },
   (table) => [
     uniqueIndex("recording_objects_recording_name_name").on(table.recordingName, table.name),
-    readableByMembers("recording_objects_select_member", memberOfRecording(table.recordingName)),
+    selectPolicy("recording_objects_select_member", memberOfRecording(table.recordingName)),
   ],
 ).enableRLS();
 
@@ -179,6 +194,6 @@ export const recordingEvents = pgTable(
   (table) => [
     index("recording_events_recording_name").on(table.recordingName),
     index("recording_events_occurred_at").on(table.occurredAt),
-    readableByMembers("recording_events_select_member", memberOfRecording(table.recordingName)),
+    selectPolicy("recording_events_select_access", accessToRecording(table.recordingName)),
   ],
 ).enableRLS();

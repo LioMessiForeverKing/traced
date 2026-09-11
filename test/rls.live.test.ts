@@ -31,7 +31,7 @@ interface Visibility {
 }
 
 const site = { a: "", b: "" };
-const account = { alice: "", bob: "", outsider: "" };
+const account = { alice: "", bob: "", viewer: "", outsider: "" };
 
 async function createAccount(label: string): Promise<string> {
   const { data, error } = await admin.auth.admin.createUser({
@@ -132,15 +132,32 @@ const oneSite: Visibility = {
   events: 1,
 };
 
+const sharedSite: Visibility = { ...oneSite, members: 2 };
+
+const theRecordOnly: Visibility = {
+  projects: 1,
+  members: 0,
+  systems: 0,
+  cameraUsers: 0,
+  devices: 0,
+  recordings: 1,
+  objects: 0,
+  events: 1,
+};
+
 beforeAll(async () => {
   account.alice = await createAccount("alice");
   account.bob = await createAccount("bob");
+  account.viewer = await createAccount("viewer");
   account.outsider = await createAccount("outsider");
   site.a = await seedSite("A");
   site.b = await seedSite("B");
   await db`
-    insert into project_members (project_id, user_id)
-    values (${site.a}, ${account.alice}), (${site.b}, ${account.bob})
+    insert into project_members (project_id, user_id, role)
+    values
+      (${site.a}, ${account.alice}, 'member'),
+      (${site.b}, ${account.bob}, 'member'),
+      (${site.a}, ${account.viewer}, 'viewer')
   `;
 });
 
@@ -159,7 +176,7 @@ afterAll(async () => {
 
 describe("row level security", () => {
   it("shows a member every table for their own project", async () => {
-    expect(await visibleTo(account.alice)).toEqual(oneSite);
+    expect(await visibleTo(account.alice)).toEqual(sharedSite);
   });
 
   it("hides another project entirely from a member", async () => {
@@ -178,6 +195,20 @@ describe("row level security", () => {
 
   it("shows the other member their own project and only theirs", async () => {
     expect(await visibleTo(account.bob)).toEqual(oneSite);
+  });
+
+  it("shows an insurance viewer the record and none of the site around it", async () => {
+    expect(await visibleTo(account.viewer)).toEqual(theRecordOnly);
+  });
+
+  it("shows the viewer their own project, not the one next door", async () => {
+    const [names] = await db.begin(async (tx) => {
+      const claims = JSON.stringify({ sub: account.viewer, role: "authenticated" });
+      await tx`select set_config('request.jwt.claims', ${claims}, true)`;
+      await tx`select set_config('role', 'authenticated', true)`;
+      return [await tx`select id from projects where name like ${prefix}`];
+    });
+    expect(names.map((row) => row.id)).toEqual([site.a]);
   });
 
   it("shows a signed-in non-member nothing", async () => {
