@@ -1,16 +1,20 @@
 # Traced
 
+> ### 📕 Have the hardware? Read [**docs/OPERATOR.md**](docs/OPERATOR.md) first, not this file.
+>
+> That is the runbook: a W800, a docking station and a camera, from an empty Supabase project to a
+> docked camera whose footage lands in the record. It opens with the one irreversible step in the
+> procedure — **a body worn system locks to a content destination the moment it accepts one** — and
+> this README does not. Getting the order wrong costs a factory reset of the entire system.
+>
+> This README is for the person changing the code.
+
 A content destination for Axis body worn cameras. A worker wears the camera in a vest; when the
 camera docks, the AXIS W800 system controller pushes every recording here, and it lands in
 Supabase — the clip in Storage, the who/when/where in Postgres.
 
 Recordings are not live-streamed. The W800 offloads them after docking, one HTTPS push at a time,
 speaking a small subset of the OpenStack Swift API. This service is that server.
-
-**Standing this up on a real site, with real hardware, is [docs/OPERATOR.md](docs/OPERATOR.md).**
-That is the runbook for the person holding the camera; this README is for the person changing the
-code. Read the runbook first if a W800 is involved — it opens with the one irreversible step in the
-whole procedure, and this file does not.
 
 ## Run it
 
