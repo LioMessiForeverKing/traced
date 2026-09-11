@@ -50,6 +50,14 @@ too little, never too much.
 **The Axis protocol** — `src/app.ts` is the wire. The spec is
 `github.com/AxisCommunications/body-worn-integration-api`. Change the wire only with the spec open.
 
+**`docs/OPERATOR.md`** is the runbook for whoever has the hardware, and it is the one document in
+this repo written for someone who is not changing the code. Every step in it that nobody has
+actually performed carries a `⚠` and names the Axis document it came from. **Do not remove a `⚠`
+until a person has done that step on real hardware and said so** — a runbook that overstates what
+has been tried is worse than one with gaps, because the gaps are what an operator is asked to
+report back. Anything that changes `CD_PUBLIC_URL`, the connection file, the wire or the env
+contract makes that file stale and is fixed in the same PR.
+
 **Analysis** — `src/analysis/` turns a complete recording into `recording_events`: `frames.ts`
 samples on a duration-derived interval *plus* scene changes, so a long continuous recording is
 covered end to end rather than only at its start; it shells out to `ffmpeg-static`, `extractor.ts` is the only place that talks to OpenAI, `loop.ts`

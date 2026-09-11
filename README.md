@@ -7,6 +7,11 @@ Supabase — the clip in Storage, the who/when/where in Postgres.
 Recordings are not live-streamed. The W800 offloads them after docking, one HTTPS push at a time,
 speaking a small subset of the OpenStack Swift API. This service is that server.
 
+**Standing this up on a real site, with real hardware, is [docs/OPERATOR.md](docs/OPERATOR.md).**
+That is the runbook for the person holding the camera; this README is for the person changing the
+code. Read the runbook first if a W800 is involved — it opens with the one irreversible step in the
+whole procedure, and this file does not.
+
 ## Run it
 
 ```bash
@@ -28,8 +33,16 @@ local use; a real deployment inserts its own row in `projects` and points `PROJE
 npm run connection-file           # writes traced-connection.json
 ```
 
-Upload that file in AXIS Body Worn Manager under **Content destination**. From then on, every
-docked camera offloads to this service.
+Upload that file in AXIS Body Worn Manager. From then on, every docked camera offloads to this
+service.
+
+Do not do that from this section alone. **A body worn system locks to a content destination the
+moment it accepts one**, and changing it afterwards means factory-resetting the whole system — so
+the order of operations matters more than the command does. [docs/OPERATOR.md](docs/OPERATOR.md)
+has that order, the network prerequisites the file's `CD_PUBLIC_URL` depends on, and what every
+field in the file means.
+
+The file carries `CD_PASSWORD` in clear text. Treat it as a secret.
 
 ## Prove it without a camera
 
@@ -191,8 +204,10 @@ npm run audit:comments
 
 ## Known limits of this slice
 
-- HTTP only. The connection file carries no certificate, which the Axis spec allows for
-  development and warns against for production. TLS is the next slice.
+- HTTP only. The connection file carries no `HTTPSCertificate` field, which the Axis spec allows
+  for development and warns against for production. TLS is the next slice. **Whether a shipping
+  W800 will accept a plain-HTTP content destination at all is untested**, and if it refuses, TLS
+  blocks every hardware test.
 - No content encryption (`WantEncryption: false`).
 - Supabase Storage on the free plan caps a single upload at 50 MB. Long clips will 500 until the
   plan or the upload path changes.
