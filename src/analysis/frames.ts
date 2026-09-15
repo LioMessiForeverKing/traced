@@ -6,6 +6,7 @@ import ffmpegStatic from "ffmpeg-static";
 
 export interface Frame {
   offsetSeconds: number;
+  sceneChange: boolean;
   jpeg: Buffer;
 }
 
@@ -24,7 +25,7 @@ const FFMPEG = ffmpegStatic as unknown as string | null;
 export const DECODE_CEILING = 400;
 const MIN_INTERVAL_SECONDS = 1;
 const SCENE_SPACING_DIVISOR = 4;
-const FRAME_LINE = /^frame:\d+\s+pts:\S+\s+pts_time:(-?[\d.]+)/gm;
+const FRAME_LINE = /^frame:\d+\s+pts:\S+\s+pts_time:(-?[\d.]+)(?:\s*\nlavfi\.scene_score=([\d.]+))?/gm;
 const DURATION_LINE = /Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/;
 const URL_WITH_QUERY = /((?:https?:\/\/|\/)\S*?)\?\S*/g;
 
@@ -94,28 +95,44 @@ export function selectExpression(
   return terms.join("+");
 }
 
-function parseOffsets(stdout: string): number[] {
-  return [...stdout.matchAll(FRAME_LINE)].map((match) => Math.max(0, Number(match[1])));
+interface Selection {
+  offsetSeconds: number;
+  sceneScore: number;
 }
 
-export function spreadOverTime(frames: Frame[], maxFrames: number, duration: number | null): Frame[] {
+function parseSelections(stdout: string): Selection[] {
+  return [...stdout.matchAll(FRAME_LINE)].map((match) => ({
+    offsetSeconds: Math.max(0, Number(match[1])),
+    sceneScore: Number(match[2] ?? 0),
+  }));
+}
+
+export function spreadOverTime(frames: Frame[], maxFrames: number): Frame[] {
   if (frames.length <= maxFrames || maxFrames < 1) return frames;
   if (maxFrames === 1) return [frames[0]!];
-  const span = duration ?? frames.at(-1)!.offsetSeconds;
-  const taken = new Set<number>();
-  const chosen: Frame[] = [];
-  for (let slot = 0; slot < maxFrames; slot += 1) {
+  const span = frames.at(-1)!.offsetSeconds;
+  const tolerance = span / (maxFrames - 1) / 2;
+  const taken = new Set<number>([0]);
+  const chosen: Frame[] = [frames[0]!];
+  for (let slot = 1; slot < maxFrames; slot += 1) {
     const target = (span * slot) / (maxFrames - 1);
-    let best = -1;
-    let bestDistance = Infinity;
+    let nearest = -1;
+    let nearestDistance = Infinity;
+    let scene = -1;
+    let sceneDistance = Infinity;
     for (let index = 0; index < frames.length; index += 1) {
       if (taken.has(index)) continue;
       const distance = Math.abs(frames[index]!.offsetSeconds - target);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = index;
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = index;
+      }
+      if (frames[index]!.sceneChange && distance <= tolerance && distance < sceneDistance) {
+        sceneDistance = distance;
+        scene = index;
       }
     }
+    const best = scene >= 0 ? scene : nearest;
     if (best < 0) break;
     taken.add(best);
     chosen.push(frames[best]!);
@@ -146,15 +163,16 @@ export const sampleFrames: FrameSampler = async (source, options) => {
       join(dir, "frame-%04d.jpg"),
     ]);
 
-    const offsets = parseOffsets(stdout);
+    const selections = parseSelections(stdout);
     const files = (await readdir(dir)).sort();
     const frames = await Promise.all(
       files.map(async (file, index) => ({
-        offsetSeconds: offsets[index] ?? 0,
+        offsetSeconds: selections[index]?.offsetSeconds ?? 0,
+        sceneChange: (selections[index]?.sceneScore ?? 0) > options.sceneThreshold,
         jpeg: await readFile(join(dir, file)),
       })),
     );
-    return spreadOverTime(frames, options.maxFrames, duration);
+    return spreadOverTime(frames, options.maxFrames);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

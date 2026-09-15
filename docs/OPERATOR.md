@@ -359,7 +359,9 @@ filmed, the whole chain works and you are the first person to have proved it.
   from a moving worker is that nobody knows yet.
 - **Is the frame sampling covering the clip?** Body worn footage is one continuous shot and never
   cuts, so scene detection alone finds almost nothing in it. Frames are also taken at
-  `duration ÷ ANALYSIS_MAX_FRAMES` intervals, which is what covers the whole recording. The default
+  `max(1s, duration ÷ ANALYSIS_MAX_FRAMES, duration ÷ 399)` intervals, which is what covers the whole
+  recording — the last of those three is a floor that keeps the whole clip inside the 400 frames
+  ffmpeg will decode, so raising `ANALYSIS_MAX_FRAMES` above 400 returns no more than 400. The default
   `ANALYSIS_SCENE_THRESHOLD` of `0.4` is ffmpeg's conventional scene-cut figure, calibrated for
   footage with hard cuts, which this is not — so it contributes almost nothing on body worn video
   and the interval does the work. Lowering it is safe but it is not the fix for a long clip that

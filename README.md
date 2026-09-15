@@ -79,7 +79,9 @@ Frames are chosen two ways at once, and the first one is what makes a long recor
 `ANALYSIS_MAX_FRAMES` is divided into the clip's duration to give a sampling interval, and a frame
 is taken whenever that interval has elapsed since the last one — so a two-hour recording is covered
 end to end rather than densely at the start. On top of that, any scene change above
-`ANALYSIS_SCENE_THRESHOLD` also takes a frame, which adds detail wherever the view actually changes.
+`ANALYSIS_SCENE_THRESHOLD` also takes a frame, and when more frames are decoded than the budget
+allows, a scene change wins its slot against a merely closer frame — so the detail survives the cut
+as long as it sits within half a slot of where that slot was going to look anyway.
 
 That split matters because body worn footage is one continuous shot from a moving camera and never
 cuts. Scene detection alone finds nothing in it: at the default threshold a 17-second clip yielded a
@@ -91,7 +93,8 @@ the budget — and at a low enough threshold filled the decode ceiling before th
 only the opening of the recording while the record claimed the whole shift. Both the interval and
 that spacing are floored at `duration ÷ 399`, so the whole recording can never ask ffmpeg for more
 than the 400 frames it will decode, whatever `ANALYSIS_SCENE_THRESHOLD` and `ANALYSIS_MAX_FRAMES`
-are set to. Raising the frame budget past 399 therefore buys nothing; the interval stops shrinking.
+are set to. The interval stops shrinking at `ANALYSIS_MAX_FRAMES` of 399, so no budget above 400
+returns more than 400 frames.
 
 Both floors are derived from the clip's duration, so **a recording whose duration ffmpeg cannot read
 keeps none of this**. There the sampler falls back to scene changes alone and a low threshold can

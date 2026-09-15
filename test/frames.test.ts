@@ -95,31 +95,49 @@ describe("scene spacing", () => {
 });
 
 describe("spreading the frame budget", () => {
-  const frame = (offsetSeconds: number): Frame => ({ offsetSeconds, jpeg: Buffer.alloc(1) });
+  const frame = (offsetSeconds: number, sceneChange = false): Frame => ({
+    offsetSeconds,
+    sceneChange,
+    jpeg: Buffer.alloc(1),
+  });
 
   it("keeps every frame when the budget is not exceeded", () => {
     const frames = [frame(0), frame(5), frame(10)];
-    expect(spreadOverTime(frames, 24, 10)).toEqual(frames);
+    expect(spreadOverTime(frames, 24)).toEqual(frames);
   });
 
   it("spends the budget on the recording, not on the busiest three seconds", () => {
     const burst = Array.from({ length: 30 }, (_, index) => frame(index * 0.1));
     const rest = Array.from({ length: 10 }, (_, index) => frame((index + 1) * 10));
-    const chosen = spreadOverTime([...burst, ...rest], 5, 100);
+    const chosen = spreadOverTime([...burst, ...rest], 5);
 
     expect(chosen.map((f) => f.offsetSeconds)).toEqual([0, 20, 50, 70, 100]);
   });
 
-  it("returns frames in recording order", () => {
-    const frames = Array.from({ length: 40 }, (_, index) => frame(index * 3));
-    const chosen = spreadOverTime(frames, 6, 117);
-    const offsets = chosen.map((f) => f.offsetSeconds);
-    expect(offsets).toEqual([...offsets].sort((a, b) => a - b));
+  it("spans the frames it has, not a container that outlasts them", () => {
+    const video = Array.from({ length: 61 }, (_, index) => frame(index));
+    expect(spreadOverTime(video, 5).map((f) => f.offsetSeconds)).toEqual([0, 15, 30, 45, 60]);
   });
 
-  it("falls back to the last offset when the duration is unknown", () => {
-    const frames = [frame(0), frame(1), frame(2), frame(90)];
-    expect(spreadOverTime(frames, 2, null).map((f) => f.offsetSeconds)).toEqual([0, 90]);
+  it("keeps a scene change over a merely closer frame within the same slot", () => {
+    const interval = Array.from({ length: 25 }, (_, index) => frame(index * 150));
+    const scenes = [frame(400, true), frame(1000, true), frame(2500, true)];
+    const candidates = [...interval, ...scenes].sort((a, b) => a.offsetSeconds - b.offsetSeconds);
+
+    const kept = spreadOverTime(candidates, 24).filter((f) => f.sceneChange);
+    expect(kept.map((f) => f.offsetSeconds)).toEqual([400, 1000, 2500]);
+  });
+
+  it("refuses a scene change too far from the slot to stand in for it", () => {
+    const candidates = [frame(39), frame(460), frame(653, true), frame(690), frame(699)];
+
+    expect(spreadOverTime(candidates, 2).map((f) => f.offsetSeconds)).toEqual([39, 653]);
+  });
+
+  it("returns frames in recording order", () => {
+    const frames = Array.from({ length: 40 }, (_, index) => frame(index * 3));
+    const offsets = spreadOverTime(frames, 6).map((f) => f.offsetSeconds);
+    expect(offsets).toEqual([...offsets].sort((a, b) => a - b));
   });
 });
 
