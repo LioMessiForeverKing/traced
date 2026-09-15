@@ -95,11 +95,7 @@ describe("scene spacing", () => {
 });
 
 describe("spreading the frame budget", () => {
-  const frame = (offsetSeconds: number, sceneChange = false): Frame => ({
-    offsetSeconds,
-    sceneChange,
-    jpeg: Buffer.alloc(1),
-  });
+  const frame = (offsetSeconds: number): Frame => ({ offsetSeconds, jpeg: Buffer.alloc(1) });
 
   it("keeps every frame when the budget is not exceeded", () => {
     const frames = [frame(0), frame(5), frame(10)];
@@ -125,26 +121,16 @@ describe("spreading the frame budget", () => {
     expect(spreadOverTime(video, 5).map((f) => f.offsetSeconds)).toEqual([0, 15, 30, 45, 60]);
   });
 
-  it("keeps a scene change over a merely closer frame within the same slot", () => {
-    const interval = Array.from({ length: 25 }, (_, index) => frame(index * 150));
-    const scenes = [frame(400, true), frame(1000, true), frame(2500, true)];
-    const candidates = [...interval, ...scenes].sort((a, b) => a.offsetSeconds - b.offsetSeconds);
+  it("refuses an offset it cannot compare rather than returning a gap", () => {
+    const candidates = [frame(0), frame(10), frame(Number.NaN)];
 
-    const kept = spreadOverTime(candidates, 24).filter((f) => f.sceneChange);
-    expect(kept.map((f) => f.offsetSeconds)).toEqual([400, 1000, 2500]);
+    expect(() => spreadOverTime(candidates, 2)).toThrow(/comparable offset/);
   });
 
-  it("leaves a scene change for the slot it belongs to, rather than the first that wants it", () => {
-    const candidates = [frame(0), frame(400), frame(900, true), frame(1000)];
+  it("keeps the recording's last frame, not a crowd near the end", () => {
+    const candidates = [frame(0), frame(50), frame(74), frame(76), frame(100)];
 
-    expect(spreadOverTime(candidates, 3).map((f) => f.offsetSeconds)).toEqual([0, 400, 900]);
-  });
-
-  it("does not spend a second slot on a scene change the opening frame already shows", () => {
-    const interval = Array.from({ length: 25 }, (_, index) => frame(index * 300));
-    const candidates = [interval[0]!, frame(3, true), ...interval.slice(1)];
-
-    expect(spreadOverTime(candidates, 24).map((f) => f.offsetSeconds).slice(0, 3)).toEqual([0, 300, 600]);
+    expect(spreadOverTime(candidates, 3).map((f) => f.offsetSeconds)).toEqual([0, 50, 100]);
   });
 
   it("returns frames in recording order", () => {

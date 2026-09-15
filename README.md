@@ -79,9 +79,10 @@ Frames are chosen two ways at once, and the first one is what makes a long recor
 `ANALYSIS_MAX_FRAMES` is divided into the clip's duration to give a sampling interval, and a frame
 is taken whenever that interval has elapsed since the last one — so a two-hour recording is covered
 end to end rather than densely at the start. On top of that, any scene change above
-`ANALYSIS_SCENE_THRESHOLD` also takes a frame, and when more frames are decoded than the budget
-allows, a scene change wins its slot against a merely closer frame — so the detail survives the cut
-as long as it sits within half a slot of where that slot was going to look anyway.
+`ANALYSIS_SCENE_THRESHOLD` also takes a frame, which adds detail wherever the view actually changes.
+When more frames are decoded than the budget allows, the cut is made purely on time — nothing knows
+which frames were scene changes, so lowering the threshold is safe but changes little of what
+reaches the model on a long recording. Making a scene change survive the cut is its own change.
 
 That split matters because body worn footage is one continuous shot from a moving camera and never
 cuts. Scene detection alone finds nothing in it: at the default threshold a 17-second clip yielded a

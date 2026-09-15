@@ -6,7 +6,6 @@ import ffmpegStatic from "ffmpeg-static";
 
 export interface Frame {
   offsetSeconds: number;
-  sceneChange: boolean;
   jpeg: Buffer;
 }
 
@@ -25,7 +24,7 @@ const FFMPEG = ffmpegStatic as unknown as string | null;
 export const DECODE_CEILING = 400;
 const MIN_INTERVAL_SECONDS = 1;
 const SCENE_SPACING_DIVISOR = 4;
-const FRAME_LINE = /^frame:\d+\s+pts:\S+\s+pts_time:(-?[\d.]+)(?:\s*\nlavfi\.scene_score=([\d.]+))?/gm;
+const FRAME_LINE = /^frame:(\d+)\s+pts:\S+\s+pts_time:(-?[\d.]+)/gm;
 const DURATION_LINE = /Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/;
 const URL_WITH_QUERY = /((?:https?:\/\/|\/)\S*?)\?\S*/g;
 
@@ -95,16 +94,18 @@ export function selectExpression(
   return terms.join("+");
 }
 
-interface Selection {
+interface Timing {
+  index: number;
   offsetSeconds: number;
-  sceneScore: number;
 }
 
-function parseSelections(stdout: string): Selection[] {
-  return [...stdout.matchAll(FRAME_LINE)].map((match) => ({
-    offsetSeconds: Math.max(0, Number(match[1])),
-    sceneScore: Number(match[2] ?? 0),
-  }));
+function parseTimings(stdout: string): Timing[] {
+  return [...stdout.matchAll(FRAME_LINE)].flatMap((match) => {
+    const offsetSeconds = Number(match[2]);
+    return Number.isFinite(offsetSeconds)
+      ? [{ index: Number(match[1]), offsetSeconds: Math.max(0, offsetSeconds) }]
+      : [];
+  });
 }
 
 export function spreadOverTime(frames: Frame[], maxFrames: number): Frame[] {
@@ -112,31 +113,21 @@ export function spreadOverTime(frames: Frame[], maxFrames: number): Frame[] {
   if (maxFrames === 1) return [frames[0]!];
   const first = frames[0]!.offsetSeconds;
   const span = frames.at(-1)!.offsetSeconds - first;
-  const tolerance = span / (maxFrames - 1) / 2;
   const taken = new Set<number>([0]);
   const chosen: Frame[] = [frames[0]!];
   for (let slot = 1; slot < maxFrames; slot += 1) {
     const target = first + (span * slot) / (maxFrames - 1);
-    let nearest = -1;
-    let nearestDistance = Infinity;
-    let scene = -1;
-    let sceneDistance = Infinity;
+    let best = -1;
+    let bestDistance = Infinity;
     for (let index = 0; index < frames.length; index += 1) {
       if (taken.has(index)) continue;
-      const offset = frames[index]!.offsetSeconds;
-      const distance = Math.abs(offset - target);
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearest = index;
-      }
-      const within = offset >= target - tolerance && offset <= target + tolerance;
-      if (frames[index]!.sceneChange && within && distance < sceneDistance) {
-        sceneDistance = distance;
-        scene = index;
+      const distance = Math.abs(frames[index]!.offsetSeconds - target);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
       }
     }
-    const best = scene >= 0 ? scene : nearest;
-    if (best < 0) break;
+    if (best < 0) throw new Error(`frame ${slot} of ${maxFrames} has no comparable offset`);
     taken.add(best);
     chosen.push(frames[best]!);
   }
@@ -166,15 +157,16 @@ export const sampleFrames: FrameSampler = async (source, options) => {
       join(dir, "frame-%04d.jpg"),
     ]);
 
-    const selections = parseSelections(stdout);
+    const timings = parseTimings(stdout);
     const files = (await readdir(dir)).sort();
-    if (files.length > selections.length) {
-      throw new Error(`ffmpeg wrote ${files.length} frames but timed ${selections.length}`);
-    }
+    files.forEach((_, index) => {
+      if (timings[index]?.index !== index) {
+        throw new Error(`ffmpeg did not time frame ${index} of the ${files.length} it wrote`);
+      }
+    });
     const frames = await Promise.all(
       files.map(async (file, index) => ({
-        offsetSeconds: selections[index]!.offsetSeconds,
-        sceneChange: selections[index]!.sceneScore > options.sceneThreshold,
+        offsetSeconds: timings[index]!.offsetSeconds,
         jpeg: await readFile(join(dir, file)),
       })),
     );
