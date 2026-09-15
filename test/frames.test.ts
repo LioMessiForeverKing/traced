@@ -134,10 +134,18 @@ describe("spreading the frame budget", () => {
     expect(kept.map((f) => f.offsetSeconds)).toEqual([400, 1000, 2500]);
   });
 
-  it("refuses a scene change too far from the slot to stand in for it", () => {
-    const candidates = [frame(39), frame(460), frame(653, true), frame(690), frame(699)];
+  it("leaves a scene change for the slot it belongs to, rather than the first that wants it", () => {
+    const candidates = [frame(0), frame(400), frame(900, true), frame(1000)];
 
-    expect(spreadOverTime(candidates, 2).map((f) => f.offsetSeconds)).toEqual([39, 653]);
+    expect(spreadOverTime(candidates, 3).map((f) => f.offsetSeconds)).toEqual([0, 400, 900]);
+  });
+
+  it("reaches a scene change in the opening, which no slot targets", () => {
+    const interval = Array.from({ length: 25 }, (_, index) => frame(index * 12.5));
+    const candidates = [interval[0]!, frame(5, true), ...interval.slice(1)];
+
+    const kept = spreadOverTime(candidates, 24).filter((f) => f.sceneChange);
+    expect(kept.map((f) => f.offsetSeconds)).toEqual([5]);
   });
 
   it("returns frames in recording order", () => {

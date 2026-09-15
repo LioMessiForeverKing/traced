@@ -117,18 +117,21 @@ export function spreadOverTime(frames: Frame[], maxFrames: number): Frame[] {
   const chosen: Frame[] = [frames[0]!];
   for (let slot = 1; slot < maxFrames; slot += 1) {
     const target = first + (span * slot) / (maxFrames - 1);
+    const reaches = slot === 1 ? first : target - tolerance;
     let nearest = -1;
     let nearestDistance = Infinity;
     let scene = -1;
     let sceneDistance = Infinity;
     for (let index = 0; index < frames.length; index += 1) {
       if (taken.has(index)) continue;
-      const distance = Math.abs(frames[index]!.offsetSeconds - target);
+      const offset = frames[index]!.offsetSeconds;
+      const distance = Math.abs(offset - target);
       if (distance < nearestDistance) {
         nearestDistance = distance;
         nearest = index;
       }
-      if (frames[index]!.sceneChange && distance <= tolerance && distance < sceneDistance) {
+      const within = offset >= reaches && offset <= target + tolerance;
+      if (frames[index]!.sceneChange && within && distance < sceneDistance) {
         sceneDistance = distance;
         scene = index;
       }
@@ -166,10 +169,13 @@ export const sampleFrames: FrameSampler = async (source, options) => {
 
     const selections = parseSelections(stdout);
     const files = (await readdir(dir)).sort();
+    if (selections.length !== files.length) {
+      throw new Error(`ffmpeg timed ${selections.length} frames but wrote ${files.length}`);
+    }
     const frames = await Promise.all(
       files.map(async (file, index) => ({
-        offsetSeconds: selections[index]?.offsetSeconds ?? 0,
-        sceneChange: (selections[index]?.sceneScore ?? 0) > options.sceneThreshold,
+        offsetSeconds: selections[index]!.offsetSeconds,
+        sceneChange: selections[index]!.sceneScore > options.sceneThreshold,
         jpeg: await readFile(join(dir, file)),
       })),
     );

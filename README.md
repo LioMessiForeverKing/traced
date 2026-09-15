@@ -98,8 +98,8 @@ returns more than 400 frames.
 
 Both floors are derived from the clip's duration, so **a recording whose duration ffmpeg cannot read
 keeps none of this**. There the sampler falls back to scene changes alone and a low threshold can
-still fill the ceiling early. Nothing detects or reports that today; it is written down in the
-timeline rather than fixed here.
+still fill the ceiling early. Nothing detects or reports that today, and no clip this repo has seen
+has ever reported an unreadable duration.
 
 A failed analysis is retried. `analysis_attempts` counts every failure, and the claim query picks a
 failed recording back up once ten minutes have passed, up to three attempts. That matters because
