@@ -21,8 +21,9 @@ export type FrameSampler = (source: string, options: SampleOptions) => Promise<F
 // so the import is the string at runtime and the namespace to the compiler.
 const FFMPEG = ffmpegStatic as unknown as string | null;
 
-const DECODE_CEILING = 400;
+export const DECODE_CEILING = 400;
 const MIN_INTERVAL_SECONDS = 1;
+const SCENE_SPACING_DIVISOR = 4;
 const FRAME_LINE = /^frame:\d+\s+pts:\S+\s+pts_time:(-?[\d.]+)/gm;
 const DURATION_LINE = /Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/;
 const URL_WITH_QUERY = /((?:https?:\/\/|\/)\S*?)\?\S*/g;
@@ -65,30 +66,63 @@ export async function probeDuration(source: string): Promise<number | null> {
   return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
 }
 
-export function selectExpression(sceneThreshold: number, interval: number | null): string {
-  const terms = ["eq(n,0)", `gt(scene,${sceneThreshold})`];
-  if (interval !== null) terms.push(`gte(t-prev_selected_t,${interval.toFixed(3)})`);
-  return terms.join("+");
-}
-
 export function coverageInterval(duration: number | null, maxFrames: number): number | null {
   if (duration === null || maxFrames < 1) return null;
   return Math.max(MIN_INTERVAL_SECONDS, duration / maxFrames);
+}
+
+export function sceneSpacing(duration: number | null, interval: number | null): number | null {
+  if (duration === null || interval === null) return null;
+  return Math.max(interval / SCENE_SPACING_DIVISOR, duration / DECODE_CEILING);
+}
+
+export function selectExpression(
+  sceneThreshold: number,
+  interval: number | null,
+  spacing: number | null,
+): string {
+  const scene =
+    spacing === null
+      ? `gt(scene,${sceneThreshold})`
+      : `gt(scene,${sceneThreshold})*gte(t-prev_selected_t,${spacing.toFixed(3)})`;
+  const terms = ["eq(n,0)", scene];
+  if (interval !== null) terms.push(`gte(t-prev_selected_t,${interval.toFixed(3)})`);
+  return terms.join("+");
 }
 
 function parseOffsets(stdout: string): number[] {
   return [...stdout.matchAll(FRAME_LINE)].map((match) => Math.max(0, Number(match[1])));
 }
 
-function thin<T>(items: T[], max: number): T[] {
-  if (items.length <= max || max < 1) return items;
-  if (max === 1) return [items[0]!];
-  const step = (items.length - 1) / (max - 1);
-  return Array.from({ length: max }, (_, index) => items[Math.round(index * step)]!);
+export function spreadOverTime(frames: Frame[], maxFrames: number, duration: number | null): Frame[] {
+  if (frames.length <= maxFrames || maxFrames < 1) return frames;
+  if (maxFrames === 1) return [frames[0]!];
+  const span = duration ?? frames.at(-1)!.offsetSeconds;
+  const taken = new Set<number>();
+  const chosen: Frame[] = [];
+  for (let slot = 0; slot < maxFrames; slot += 1) {
+    const target = (span * slot) / (maxFrames - 1);
+    let best = -1;
+    let bestDistance = Infinity;
+    for (let index = 0; index < frames.length; index += 1) {
+      if (taken.has(index)) continue;
+      const distance = Math.abs(frames[index]!.offsetSeconds - target);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    }
+    if (best < 0) break;
+    taken.add(best);
+    chosen.push(frames[best]!);
+  }
+  return chosen.sort((left, right) => left.offsetSeconds - right.offsetSeconds);
 }
 
 export const sampleFrames: FrameSampler = async (source, options) => {
-  const interval = coverageInterval(await probeDuration(source), options.maxFrames);
+  const duration = await probeDuration(source);
+  const interval = coverageInterval(duration, options.maxFrames);
+  const spacing = sceneSpacing(duration, interval);
   const dir = await mkdtemp(join(tmpdir(), "traced-frames-"));
   try {
     const stdout = await ffmpeg([
@@ -98,7 +132,7 @@ export const sampleFrames: FrameSampler = async (source, options) => {
       "-i",
       source,
       "-vf",
-      `select='${selectExpression(options.sceneThreshold, interval)}',metadata=print:file=-,scale=${options.width}:-2`,
+      `select='${selectExpression(options.sceneThreshold, interval, spacing)}',metadata=print:file=-,scale=${options.width}:-2`,
       "-fps_mode",
       "vfr",
       "-frames:v",
@@ -116,7 +150,7 @@ export const sampleFrames: FrameSampler = async (source, options) => {
         jpeg: await readFile(join(dir, file)),
       })),
     );
-    return thin(frames, options.maxFrames);
+    return spreadOverTime(frames, options.maxFrames, duration);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

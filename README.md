@@ -85,6 +85,13 @@ That split matters because body worn footage is one continuous shot from a movin
 cuts. Scene detection alone finds nothing in it: at the default threshold a 17-second clip yielded a
 single frame, and so would a two-hour one.
 
+Scene changes are held apart by a minimum spacing derived from the same two numbers, so the second
+way of choosing frames can never crowd out the first. Without it a camera swing produced a burst of
+near-identical frames that ate the budget — and at a low enough threshold filled the decode ceiling
+before the clip ended, sampling only its opening minutes while the record claimed the whole shift.
+The spacing is never wider than a quarter of the interval and never narrow enough to let the whole
+recording exceed the ceiling, which makes `ANALYSIS_SCENE_THRESHOLD` safe to turn down to zero.
+
 A failed analysis is retried. `analysis_attempts` counts every failure, and the claim query picks a
 failed recording back up once ten minutes have passed, up to three attempts. That matters because
 the clip is never the thing that failed — an OpenAI outage, a network blip or a timeout all mark a

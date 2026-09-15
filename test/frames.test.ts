@@ -4,7 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { coverageInterval, probeDuration, sampleFrames, selectExpression } from "../src/analysis/frames.js";
+import {
+  DECODE_CEILING,
+  coverageInterval,
+  probeDuration,
+  sampleFrames,
+  sceneSpacing,
+  selectExpression,
+  spreadOverTime,
+} from "../src/analysis/frames.js";
+import type { Frame } from "../src/analysis/frames.js";
 
 const FFMPEG = ffmpegStatic as unknown as string;
 const DURATION_SECONDS = 30;
@@ -53,11 +62,63 @@ describe("coverage interval", () => {
 
   it("falls back to scene changes alone when the duration is unknown", () => {
     expect(coverageInterval(null, 24)).toBeNull();
-    expect(selectExpression(0.4, null)).toBe("eq(n,0)+gt(scene,0.4)");
+    expect(selectExpression(0.4, null, null)).toBe("eq(n,0)+gt(scene,0.4)");
   });
 
   it("asks ffmpeg for a frame whenever the last one is old enough", () => {
-    expect(selectExpression(0.4, 300)).toBe("eq(n,0)+gt(scene,0.4)+gte(t-prev_selected_t,300.000)");
+    expect(selectExpression(0.4, 300, 75)).toBe(
+      "eq(n,0)+gt(scene,0.4)*gte(t-prev_selected_t,75.000)+gte(t-prev_selected_t,300.000)",
+    );
+  });
+});
+
+describe("scene spacing", () => {
+  it("holds scene changes apart in proportion to the coverage interval", () => {
+    expect(sceneSpacing(7200, 300)).toBe(75);
+  });
+
+  it("falls back to scene changes alone when the duration is unknown", () => {
+    expect(sceneSpacing(null, 300)).toBeNull();
+    expect(sceneSpacing(7200, null)).toBeNull();
+  });
+
+  it("keeps the whole recording inside the decode ceiling at any threshold", () => {
+    for (const duration of [17.7, 120, 600, 3600, 7200]) {
+      for (const maxFrames of [1, 24, 200, 600]) {
+        const interval = coverageInterval(duration, maxFrames)!;
+        const spacing = sceneSpacing(duration, interval)!;
+        expect(duration / spacing).toBeLessThanOrEqual(DECODE_CEILING);
+      }
+    }
+  });
+});
+
+describe("spreading the frame budget", () => {
+  const frame = (offsetSeconds: number): Frame => ({ offsetSeconds, jpeg: Buffer.alloc(1) });
+
+  it("keeps every frame when the budget is not exceeded", () => {
+    const frames = [frame(0), frame(5), frame(10)];
+    expect(spreadOverTime(frames, 24, 10)).toEqual(frames);
+  });
+
+  it("spends the budget on the recording, not on the busiest three seconds", () => {
+    const burst = Array.from({ length: 30 }, (_, index) => frame(index * 0.1));
+    const rest = Array.from({ length: 10 }, (_, index) => frame((index + 1) * 10));
+    const chosen = spreadOverTime([...burst, ...rest], 5, 100);
+
+    expect(chosen.map((f) => f.offsetSeconds)).toEqual([0, 20, 50, 70, 100]);
+  });
+
+  it("returns frames in recording order", () => {
+    const frames = Array.from({ length: 40 }, (_, index) => frame(index * 3));
+    const chosen = spreadOverTime(frames, 6, 117);
+    const offsets = chosen.map((f) => f.offsetSeconds);
+    expect(offsets).toEqual([...offsets].sort((a, b) => a - b));
+  });
+
+  it("falls back to the last offset when the duration is unknown", () => {
+    const frames = [frame(0), frame(1), frame(2), frame(90)];
+    expect(spreadOverTime(frames, 2, null).map((f) => f.offsetSeconds)).toEqual([0, 90]);
   });
 });
 

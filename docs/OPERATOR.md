@@ -359,9 +359,11 @@ filmed, the whole chain works and you are the first person to have proved it.
   from a moving worker is that nobody knows yet.
 - **Is the frame sampling covering the clip?** Body worn footage is one continuous shot and never
   cuts, so scene detection alone finds almost nothing in it. Frames are also taken at
-  `duration ÷ ANALYSIS_MAX_FRAMES` intervals to cover the whole recording. If a long clip produced
-  events only near the start, `ANALYSIS_SCENE_THRESHOLD` needs lowering — its default of `0.4` is
-  known to be calibrated for footage with hard cuts, which this is not.
+  `duration ÷ ANALYSIS_MAX_FRAMES` intervals, which is what covers the whole recording, and the
+  default `ANALYSIS_SCENE_THRESHOLD` of `0.4` measured best of six values on the one real clip we
+  have. Lowering it adds frames where the view changes; it is safe but it is not the fix for a long
+  clip that produced events only near the start. Report that symptom rather than tuning it away —
+  on real body worn footage nobody has seen it yet, and what it means is worth knowing.
 
 ---
 
