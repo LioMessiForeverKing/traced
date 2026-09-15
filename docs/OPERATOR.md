@@ -359,9 +359,26 @@ filmed, the whole chain works and you are the first person to have proved it.
   from a moving worker is that nobody knows yet.
 - **Is the frame sampling covering the clip?** Body worn footage is one continuous shot and never
   cuts, so scene detection alone finds almost nothing in it. Frames are also taken at
-  `duration ÷ ANALYSIS_MAX_FRAMES` intervals to cover the whole recording. If a long clip produced
-  events only near the start, `ANALYSIS_SCENE_THRESHOLD` needs lowering — its default of `0.4` is
-  known to be calibrated for footage with hard cuts, which this is not.
+  `max(1s, duration ÷ ANALYSIS_MAX_FRAMES, duration ÷ 399)` intervals, which is what covers the whole
+  recording — the last of those three is a floor that keeps the whole clip inside the 400 frames
+  ffmpeg will decode, so raising `ANALYSIS_MAX_FRAMES` above 400 returns no more than 400. The default
+  `ANALYSIS_SCENE_THRESHOLD` of `0.4` is ffmpeg's conventional scene-cut figure, calibrated for
+  footage with hard cuts, which this is not — so it contributes almost nothing on body worn video
+  and the interval does the work. Lowering it is safe on any clip whose duration ffmpeg can read, and
+  every clip so far has been one. A clip whose container reports `Duration: N/A` is refused outright
+  — *ffmpeg read no duration* — because without a length there is nothing to spread a budget over.
+  A clip that reports a length shorter than the truth usually still analyses correctly — ffmpeg
+  reads to the real end either way — and is refused only when the understated length packs the
+  frames tightly enough to hit the decode ceiling first: *the clip runs past what was sampled*.
+  Report either; both mean the container is lying about its own length, and the footage itself is
+  probably fine. A third message, *ffmpeg could not open the recording*, is not about the container
+  at all — that is a signed URL that has expired, a network problem, or a missing object, and the
+  clip is untouched. A container claiming to be *longer* than its video is not refused: the whole
+  video is still covered, just with fewer frames than the budget allows, so a clip whose events look
+  unusually thin is worth checking its declared length against its real one.
+  Neither is the fix for a long clip that produced events only near the start. Report that symptom
+  rather than tuning it away — on real body worn footage nobody has seen it yet, and what it means
+  is worth knowing.
 
 ---
 

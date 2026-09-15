@@ -80,10 +80,45 @@ Frames are chosen two ways at once, and the first one is what makes a long recor
 is taken whenever that interval has elapsed since the last one — so a two-hour recording is covered
 end to end rather than densely at the start. On top of that, any scene change above
 `ANALYSIS_SCENE_THRESHOLD` also takes a frame, which adds detail wherever the view actually changes.
+When more frames are decoded than the budget allows, the cut is made purely on time — nothing knows
+which frames were scene changes, so lowering the threshold is safe but changes little of what
+reaches the model on a long recording. Making a scene change survive the cut is its own change.
 
 That split matters because body worn footage is one continuous shot from a moving camera and never
 cuts. Scene detection alone finds nothing in it: at the default threshold a 17-second clip yielded a
 single frame, and so would a two-hour one.
+
+Scene changes are held apart by a minimum spacing, so the second way of choosing frames can never
+crowd out the first. Without it a camera swing produced a burst of near-identical frames that ate
+the budget — and at a low enough threshold filled the decode ceiling before the clip ended, sampling
+only the opening of the recording while the record claimed the whole shift. Both the interval and
+that spacing are floored at `duration ÷ 399`, so the whole recording can never ask ffmpeg for more
+than the 400 frames it will decode, whatever `ANALYSIS_SCENE_THRESHOLD` and `ANALYSIS_MAX_FRAMES`
+are set to. The interval stops shrinking at `ANALYSIS_MAX_FRAMES` of 399, so no budget above 400
+returns more than 400 frames.
+
+Both floors are derived from the clip's duration, so **a recording that will not say how long it is
+gets no record at all**. Without a duration there is no interval, scene detection alone finds
+almost nothing in continuous footage, and the sampler would hand the extractor a single opening
+frame to stand for a whole shift. It refuses instead, naming what ffmpeg said about the container.
+
+A container that reports a length *shorter* than the truth is a milder problem than it sounds.
+Both floors are computed from the too-small number, so the gates come out tighter than intended and
+more frames are taken than the budget asked for — but ffmpeg still reads to the real end of the
+file, and the budget is spent across the offsets that actually came back, so the record still covers
+the whole shift. It only turns harmful when the gates are tight enough to hit the decode ceiling
+before the clip ends, and that is the case the sampler refuses: it asks ffmpeg for one frame beyond
+the ceiling, and receiving that frame is proof the clip was still going.
+
+A container that *overstates* its length is not refused, and that is deliberate. It still covers the
+whole video — the budget is spread over the offsets that came back, not over the declared length —
+but it spreads it too thinly, so two hours declared on a ten-minute clip takes about three frames
+for the whole thing. Refusing it was tried and reverted: the only signal available is the container
+`Duration:`, which is the longest stream rather than the video, so an audio track running two
+seconds past the picture — ordinary for a camera that records sound — looked identical to a clip
+that stopped early, and intact shifts were failed for it. `ffmpeg-static` ships no `ffprobe`, so the
+video stream's own length is not available to check against. The sparse-sampling consequence is
+recorded in the timeline instead.
 
 A failed analysis is retried. `analysis_attempts` counts every failure, and the claim query picks a
 failed recording back up once ten minutes have passed, up to three attempts. That matters because

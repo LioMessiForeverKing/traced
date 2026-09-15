@@ -59,8 +59,10 @@ report back. Anything that changes `CD_PUBLIC_URL`, the connection file, the wir
 contract makes that file stale and is fixed in the same PR.
 
 **Analysis** — `src/analysis/` turns a complete recording into `recording_events`: `frames.ts`
-samples on a duration-derived interval *plus* scene changes, so a long continuous recording is
-covered end to end rather than only at its start; it shells out to `ffmpeg-static`, `extractor.ts` is the only place that talks to OpenAI, `loop.ts`
+samples on a duration-derived interval *plus* scene changes held a minimum distance apart, so a long
+continuous recording is covered end to end rather than only at its start and no burst of scene
+changes can crowd the interval out or exhaust the decode ceiling before the clip ends; it shells out
+to `ffmpeg-static`, `extractor.ts` is the only place that talks to OpenAI, `loop.ts`
 claims work and owns the retry story. Nothing on the request path may call into it.
 
 **Access** — `src/access.ts` is the only place that mints an account or a membership. It uses the
