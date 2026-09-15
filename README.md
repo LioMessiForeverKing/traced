@@ -110,12 +110,15 @@ the whole shift. It only turns harmful when the gates are tight enough to hit th
 before the clip ends, and that is the case the sampler refuses: it asks ffmpeg for one frame beyond
 the ceiling, and receiving that frame is proof the clip was still going.
 
-A container that *overstates* its length is the more damaging direction, because it makes the
-interval far too wide — two hours declared on a ten-minute clip takes three frames for the whole
-thing. That is refused too: the gates guarantee a frame lands within one interval of the end, so a
-last frame further back than an interval and a spacing means the video stopped before the container
-said it would. All three refusals fail the analysis and retry, which is the honest answer — a
-record claiming a whole shift on the strength of three frames is worse than no record.
+A container that *overstates* its length is not refused, and that is deliberate. It still covers the
+whole video — the budget is spread over the offsets that came back, not over the declared length —
+but it spreads it too thinly, so two hours declared on a ten-minute clip takes about three frames
+for the whole thing. Refusing it was tried and reverted: the only signal available is the container
+`Duration:`, which is the longest stream rather than the video, so an audio track running two
+seconds past the picture — ordinary for a camera that records sound — looked identical to a clip
+that stopped early, and intact shifts were failed for it. `ffmpeg-static` ships no `ffprobe`, so the
+video stream's own length is not available to check against. The sparse-sampling consequence is
+recorded in the timeline instead.
 
 A failed analysis is retried. `analysis_attempts` counts every failure, and the claim query picks a
 failed recording back up once ten minutes have passed, up to three attempts. That matters because

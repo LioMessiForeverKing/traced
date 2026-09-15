@@ -179,15 +179,6 @@ export const sampleFrames: FrameSampler = async (source, options) => {
           : [readFile(join(dir, file)).then((jpeg) => ({ offsetSeconds, jpeg }))];
       }),
     );
-    const reached = frames.at(-1)?.offsetSeconds ?? 0;
-    const granularity = frames
-      .slice(1)
-      .reduce((widest, frame, index) => Math.max(widest, frame.offsetSeconds - frames[index]!.offsetSeconds), 0);
-    if (duration - reached >= interval + spacing + granularity) {
-      throw new Error(
-        `the last frame ffmpeg found was at ${reached.toFixed(1)}s of a recording reporting ${duration.toFixed(1)}s, so the clip ends before it says it does`,
-      );
-    }
     return spreadOverTime(frames, options.maxFrames);
   } finally {
     await rm(dir, { recursive: true, force: true });
