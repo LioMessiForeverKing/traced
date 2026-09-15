@@ -97,13 +97,18 @@ than the 400 frames it will decode, whatever `ANALYSIS_SCENE_THRESHOLD` and `ANA
 are set to. The interval stops shrinking at `ANALYSIS_MAX_FRAMES` of 399, so no budget above 400
 returns more than 400 frames.
 
-Both floors are derived from the clip's duration, so **a recording whose duration ffmpeg cannot read,
-or reads short, keeps none of this**. A container that under-reports its length — an offload cut off
-part-way, a fragmented MP4 with a stale `mvhd` — floors the interval too low and can still fill the
-ceiling before the real end. That case is now refused rather than analysed: the sampler knows how
-many frames a correctly described recording can produce, and more than that means the clip runs past
-what was sampled. The analysis fails and retries, which is the honest answer — a record claiming a
-whole shift on the strength of its opening minutes is worse than no record.
+Both floors are derived from the clip's duration, so **a recording that will not say how long it is
+gets no record at all**. Without a duration there is no interval, scene detection alone finds
+almost nothing in continuous footage, and the sampler would hand the extractor a single opening
+frame to stand for a whole shift. It refuses instead, naming what ffmpeg said about the container.
+
+A container that reports a length *shorter* than the truth is a subtler version of the same thing:
+both floors are computed, just from a number too small, so the gates come out too tight and ffmpeg
+selects past the end of what was claimed. That is what the decode ceiling catches — the sampler asks
+for one frame more than a correctly described recording can produce, and receiving it proves the
+clip runs past what was sampled. Either way the analysis fails and retries, which is the honest
+answer: a record claiming a whole shift on the strength of its opening minutes is worse than no
+record.
 
 A failed analysis is retried. `analysis_attempts` counts every failure, and the claim query picks a
 failed recording back up once ten minutes have passed, up to three attempts. That matters because

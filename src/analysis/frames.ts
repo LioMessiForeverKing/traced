@@ -60,46 +60,41 @@ async function ffmpeg(args: string[]): Promise<string> {
   return stdout;
 }
 
-export async function probeDuration(source: string): Promise<number | null> {
+async function probe(source: string): Promise<{ seconds: number | null; stderr: string }> {
   const { stderr } = await run(["-hide_banner", "-i", source]);
   const match = DURATION_LINE.exec(stderr);
-  if (!match) return null;
+  if (!match) return { seconds: null, stderr };
   const seconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
-  return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+  return { seconds: Number.isFinite(seconds) && seconds > 0 ? seconds : null, stderr };
+}
+
+export async function probeDuration(source: string): Promise<number | null> {
+  return (await probe(source)).seconds;
 }
 
 function ceilingSpacing(duration: number): number {
   return duration / (DECODE_CEILING - 1);
 }
 
-export function coverageInterval(duration: number | null, maxFrames: number): number | null {
-  if (duration === null || maxFrames < 1) return null;
-  return Math.max(MIN_INTERVAL_SECONDS, duration / maxFrames, ceilingSpacing(duration));
+export function coverageInterval(duration: number, maxFrames: number): number {
+  return Math.max(MIN_INTERVAL_SECONDS, duration / Math.max(1, maxFrames), ceilingSpacing(duration));
 }
 
-export function selectionCeiling(duration: number | null, interval: number | null, spacing: number | null): number {
-  if (duration === null || interval === null || spacing === null) return DECODE_CEILING - 1;
+export function selectionCeiling(duration: number, interval: number, spacing: number): number {
   const gate = Math.min(Number(interval.toFixed(GATE_DECIMALS)), Number(spacing.toFixed(GATE_DECIMALS)));
   return Math.min(DECODE_CEILING, 1 + Math.floor(duration / gate));
 }
 
-export function sceneSpacing(duration: number | null, interval: number | null): number | null {
-  if (duration === null || interval === null) return null;
+export function sceneSpacing(duration: number, interval: number): number {
   return Math.max(interval / SCENE_SPACING_DIVISOR, ceilingSpacing(duration));
 }
 
-export function selectExpression(
-  sceneThreshold: number,
-  interval: number | null,
-  spacing: number | null,
-): string {
-  const scene =
-    spacing === null
-      ? `gt(scene,${sceneThreshold})`
-      : `gt(scene,${sceneThreshold})*gte(t-prev_selected_t,${spacing.toFixed(GATE_DECIMALS)})`;
-  const terms = ["eq(n,0)", scene];
-  if (interval !== null) terms.push(`gte(t-prev_selected_t,${interval.toFixed(GATE_DECIMALS)})`);
-  return terms.join("+");
+export function selectExpression(sceneThreshold: number, interval: number, spacing: number): string {
+  return [
+    "eq(n,0)",
+    `gt(scene,${sceneThreshold})*gte(t-prev_selected_t,${spacing.toFixed(GATE_DECIMALS)})`,
+    `gte(t-prev_selected_t,${interval.toFixed(GATE_DECIMALS)})`,
+  ].join("+");
 }
 
 interface Timing {
@@ -142,7 +137,12 @@ export function spreadOverTime(frames: Frame[], maxFrames: number): Frame[] {
 }
 
 export const sampleFrames: FrameSampler = async (source, options) => {
-  const duration = await probeDuration(source);
+  const { seconds: duration, stderr } = await probe(source);
+  if (duration === null) {
+    throw new Error(
+      `ffmpeg read no duration for the recording, so its coverage cannot be bounded: ${redactUrls(stderr.trim()).slice(0, 500)}`,
+    );
+  }
   const interval = coverageInterval(duration, options.maxFrames);
   const spacing = sceneSpacing(duration, interval);
   const dir = await mkdtemp(join(tmpdir(), "traced-frames-"));

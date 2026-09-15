@@ -61,11 +61,6 @@ describe("coverage interval", () => {
     expect(coverageInterval(4, 24)).toBe(1);
   });
 
-  it("falls back to scene changes alone when the duration is unknown", () => {
-    expect(coverageInterval(null, 24)).toBeNull();
-    expect(selectExpression(0.4, null, null)).toBe("eq(n,0)+gt(scene,0.4)");
-  });
-
   it("asks ffmpeg for a frame whenever the last one is old enough", () => {
     expect(selectExpression(0.4, 300, 75)).toBe(
       "eq(n,0)+gt(scene,0.4)*gte(t-prev_selected_t,75.000)+gte(t-prev_selected_t,300.000)",
@@ -78,32 +73,22 @@ describe("scene spacing", () => {
     expect(sceneSpacing(7200, 300)).toBe(75);
   });
 
-  it("falls back to scene changes alone when the duration is unknown", () => {
-    expect(sceneSpacing(null, 300)).toBeNull();
-    expect(sceneSpacing(7200, null)).toBeNull();
-  });
-
   it("keeps the whole recording inside the decode ceiling at any budget", () => {
     for (const duration of [17.7, 79.8, 120, 600, 3600, 7200]) {
       for (const maxFrames of [1, 24, 100, 200, 400, 600]) {
-        const interval = coverageInterval(duration, maxFrames)!;
-        const spacing = sceneSpacing(duration, interval)!;
+        const interval = coverageInterval(duration, maxFrames);
+        const spacing = sceneSpacing(duration, interval);
         const selections = 1 + Math.floor(duration / Math.min(interval, spacing));
         expect(selections).toBeLessThanOrEqual(DECODE_CEILING);
       }
     }
   });
 
-  it("treats an unbounded sample that reaches the cap as truncated", () => {
-    expect(selectionCeiling(null, null, null)).toBe(DECODE_CEILING - 1);
-    expect(selectionCeiling(7200, null, null)).toBe(DECODE_CEILING - 1);
-  });
-
   it("never allows a correct recording to reach the frame ffmpeg is asked for", () => {
     for (const duration of [17.7, 79.8, 120, 600, 3600, 7200]) {
       for (const maxFrames of [1, 24, 100, 200, 400, 600]) {
-        const interval = coverageInterval(duration, maxFrames)!;
-        const spacing = sceneSpacing(duration, interval)!;
+        const interval = coverageInterval(duration, maxFrames);
+        const spacing = sceneSpacing(duration, interval);
         expect(selectionCeiling(duration, interval, spacing)).toBeLessThanOrEqual(DECODE_CEILING);
       }
     }
@@ -113,8 +98,8 @@ describe("scene spacing", () => {
     for (const maxFrames of [24, 50, 100, 200, 400, 600]) {
       for (let step = 0; step < 400; step += 1) {
         const duration = 1 + (step * 7199) / 399;
-        const interval = coverageInterval(duration, maxFrames)!;
-        const spacing = sceneSpacing(duration, interval)!;
+        const interval = coverageInterval(duration, maxFrames);
+        const spacing = sceneSpacing(duration, interval);
         const expression = selectExpression(0, interval, spacing);
         const gaps = [...expression.matchAll(/gte\(t-prev_selected_t,([\d.]+)\)/g)].map((m) => Number(m[1]));
         const emitted = Math.min(1 + Math.floor(duration / Math.min(...gaps)), DECODE_CEILING + 1);
@@ -124,16 +109,16 @@ describe("scene spacing", () => {
   });
 
   it("allows exactly what a correctly described recording can produce", () => {
-    const interval = coverageInterval(7200, 24)!;
-    const spacing = sceneSpacing(7200, interval)!;
+    const interval = coverageInterval(7200, 24);
+    const spacing = sceneSpacing(7200, interval);
     expect(selectionCeiling(7200, interval, spacing)).toBe(1 + Math.floor(7200 / Math.min(interval, spacing)));
   });
 
   it("stays inside the ceiling at the precision ffmpeg is actually given", () => {
     for (const duration of [17.7, 79.8, 120, 600, 3600, 7200]) {
       for (const maxFrames of [1, 24, 100, 200, 400, 600]) {
-        const interval = coverageInterval(duration, maxFrames)!;
-        const spacing = sceneSpacing(duration, interval)!;
+        const interval = coverageInterval(duration, maxFrames);
+        const spacing = sceneSpacing(duration, interval);
         const expression = selectExpression(0, interval, spacing);
         const gaps = [...expression.matchAll(/gte\(t-prev_selected_t,([\d.]+)\)/g)].map((m) => Number(m[1]));
         expect(1 + Math.floor(duration / Math.min(...gaps))).toBeLessThanOrEqual(DECODE_CEILING);
@@ -180,6 +165,22 @@ describe("spreading the frame budget", () => {
     const offsets = spreadOverTime(frames, 6).map((f) => f.offsetSeconds);
     expect(offsets).toEqual([...offsets].sort((a, b) => a - b));
   });
+});
+
+describe("a recording whose length cannot be read", () => {
+  it("is refused rather than sampled from its opening frame", async () => {
+    const raw = join(dir, "headless.h264");
+    await ffmpeg([
+      "-hide_banner", "-loglevel", "error",
+      "-f", "lavfi", "-i", `smptebars=duration=${DURATION_SECONDS}:size=320x240:rate=10`,
+      "-c:v", "libx264", "-bsf:v", "h264_mp4toannexb", "-f", "h264", raw,
+    ]);
+
+    expect(await probeDuration(raw)).toBeNull();
+    await expect(sampleFrames(raw, { maxFrames: 24, sceneThreshold: 0.4, width: 320 })).rejects.toThrow(
+      /read no duration for the recording/,
+    );
+  }, 60_000);
 });
 
 describe("sampling a continuous recording", () => {

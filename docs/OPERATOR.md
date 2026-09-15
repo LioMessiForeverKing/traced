@@ -365,14 +365,15 @@ filmed, the whole chain works and you are the first person to have proved it.
   `ANALYSIS_SCENE_THRESHOLD` of `0.4` is ffmpeg's conventional scene-cut figure, calibrated for
   footage with hard cuts, which this is not — so it contributes almost nothing on body worn video
   and the interval does the work. Lowering it is safe on any clip whose duration ffmpeg can read, and
-  every clip so far has been one. On a clip whose container reports `Duration: N/A`, or one that
-  reports a length shorter than it really is, neither floor can be computed and a lowered threshold
-  can fill the 400-frame decode ceiling before the clip ends — the analysis then fails with *the
-  clip runs past what was sampled* rather than filing a record of the opening minutes as if it were
-  the shift. If you see that, report the clip; it means the container is lying about its own length.
-  Either way it is not the fix for a long clip that produced events only near the start. Report
-  that symptom rather than tuning it away — on real body worn footage nobody has seen it yet, and
-  what it means is worth knowing.
+  every clip so far has been one. A clip whose container reports `Duration: N/A` is refused outright
+  — *ffmpeg read no duration* — because without a length there is nothing to spread a budget over.
+  A clip that reports a length shorter than the truth is refused differently: both floors are
+  computed from the too-small number, the gates come out too tight, and the extra frame that
+  arrives proves the point — *the clip runs past what was sampled*. Report either; both mean the
+  container is lying about its own length, and the footage itself is probably fine.
+  Neither is the fix for a long clip that produced events only near the start. Report that symptom
+  rather than tuning it away — on real body worn footage nobody has seen it yet, and what it means
+  is worth knowing.
 
 ---
 
