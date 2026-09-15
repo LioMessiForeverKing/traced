@@ -114,6 +114,12 @@ describe("spreading the frame budget", () => {
     expect(chosen.map((f) => f.offsetSeconds)).toEqual([0, 20, 50, 70, 100]);
   });
 
+  it("spans from the first frame, not from zero", () => {
+    const candidates = [frame(100), frame(110), frame(150), frame(200)];
+
+    expect(spreadOverTime(candidates, 3).map((f) => f.offsetSeconds)).toEqual([100, 150, 200]);
+  });
+
   it("spans the frames it has, not a container that outlasts them", () => {
     const video = Array.from({ length: 61 }, (_, index) => frame(index));
     expect(spreadOverTime(video, 5).map((f) => f.offsetSeconds)).toEqual([0, 15, 30, 45, 60]);

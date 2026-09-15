@@ -110,12 +110,13 @@ function parseSelections(stdout: string): Selection[] {
 export function spreadOverTime(frames: Frame[], maxFrames: number): Frame[] {
   if (frames.length <= maxFrames || maxFrames < 1) return frames;
   if (maxFrames === 1) return [frames[0]!];
-  const span = frames.at(-1)!.offsetSeconds;
+  const first = frames[0]!.offsetSeconds;
+  const span = frames.at(-1)!.offsetSeconds - first;
   const tolerance = span / (maxFrames - 1) / 2;
   const taken = new Set<number>([0]);
   const chosen: Frame[] = [frames[0]!];
   for (let slot = 1; slot < maxFrames; slot += 1) {
-    const target = (span * slot) / (maxFrames - 1);
+    const target = first + (span * slot) / (maxFrames - 1);
     let nearest = -1;
     let nearestDistance = Infinity;
     let scene = -1;

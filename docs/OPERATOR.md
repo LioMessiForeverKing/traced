@@ -364,7 +364,10 @@ filmed, the whole chain works and you are the first person to have proved it.
   ffmpeg will decode, so raising `ANALYSIS_MAX_FRAMES` above 400 returns no more than 400. The default
   `ANALYSIS_SCENE_THRESHOLD` of `0.4` is ffmpeg's conventional scene-cut figure, calibrated for
   footage with hard cuts, which this is not — so it contributes almost nothing on body worn video
-  and the interval does the work. Lowering it is safe but it is not the fix for a long clip that
+  and the interval does the work. Lowering it is safe on any clip whose duration ffmpeg can read, and
+  every clip so far has been one — but on a clip whose container reports `Duration: N/A` neither
+  floor can be computed, and a lowered threshold can then fill the 400-frame decode ceiling in the
+  opening seconds and analyse nothing after it. Either way it is not the fix for a long clip that
   produced events only near the start. Report that symptom rather than tuning it away — on real body
   worn footage nobody has seen it yet, and what it means is worth knowing.
 
