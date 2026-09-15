@@ -152,6 +152,23 @@ describe("a recording whose length cannot be read", () => {
   }, 60_000);
 });
 
+describe("a recording that ends before its container says", () => {
+  it("is refused rather than filed as a sparse shift", async () => {
+    const padded = join(dir, "padded.mp4");
+    await ffmpeg([
+      "-hide_banner", "-loglevel", "error",
+      "-f", "lavfi", "-i", `testsrc2=duration=${DURATION_SECONDS}:size=320x240:rate=10`,
+      "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono:d=300",
+      "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", padded,
+    ]);
+
+    expect(await probeDuration(padded)).toBeGreaterThan(DURATION_SECONDS * 5);
+    await expect(sampleFrames(padded, { maxFrames: 24, sceneThreshold: 0.4, width: 320 })).rejects.toThrow(
+      /ends before it says it does/,
+    );
+  }, 120_000);
+});
+
 describe("sampling a continuous recording", () => {
   it("reads the duration off the container", async () => {
     const duration = await probeDuration(clip);

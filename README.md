@@ -108,9 +108,14 @@ more frames are taken than the budget asked for — but ffmpeg still reads to th
 file, and the budget is spent across the offsets that actually came back, so the record still covers
 the whole shift. It only turns harmful when the gates are tight enough to hit the decode ceiling
 before the clip ends, and that is the case the sampler refuses: it asks ffmpeg for one frame beyond
-the ceiling, and receiving that frame is proof the clip was still going. The analysis fails and
-retries, which is the honest answer — a record claiming a whole shift on the strength of its
-opening minutes is worse than no record.
+the ceiling, and receiving that frame is proof the clip was still going.
+
+A container that *overstates* its length is the more damaging direction, because it makes the
+interval far too wide — two hours declared on a ten-minute clip takes three frames for the whole
+thing. That is refused too: the gates guarantee a frame lands within one interval of the end, so a
+last frame further back than an interval and a spacing means the video stopped before the container
+said it would. All three refusals fail the analysis and retry, which is the honest answer — a
+record claiming a whole shift on the strength of three frames is worse than no record.
 
 A failed analysis is retried. `analysis_attempts` counts every failure, and the claim query picks a
 failed recording back up once ten minutes have passed, up to three attempts. That matters because

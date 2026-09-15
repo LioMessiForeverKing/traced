@@ -28,6 +28,7 @@ const MIN_INTERVAL_SECONDS = 1;
 const SCENE_SPACING_DIVISOR = 4;
 const FRAME_LINE = /^frame:(\d+)\s+pts:\S+\s+pts_time:(-?[\d.]+)/gm;
 const DURATION_LINE = /Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/;
+const OPENED_LINE = /^Input #0/m;
 const URL_WITH_QUERY = /((?:https?:\/\/|\/)\S*?)\?\S*/g;
 
 export function redactUrls(text: string): string {
@@ -60,12 +61,13 @@ async function ffmpeg(args: string[]): Promise<string> {
   return stdout;
 }
 
-async function probe(source: string): Promise<{ seconds: number | null; stderr: string }> {
+async function probe(source: string): Promise<{ seconds: number | null; opened: boolean; stderr: string }> {
   const { stderr } = await run(["-hide_banner", "-i", source]);
+  const opened = OPENED_LINE.test(stderr);
   const match = DURATION_LINE.exec(stderr);
-  if (!match) return { seconds: null, stderr };
+  if (!match) return { seconds: null, opened, stderr };
   const seconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
-  return { seconds: Number.isFinite(seconds) && seconds > 0 ? seconds : null, stderr };
+  return { seconds: Number.isFinite(seconds) && seconds > 0 ? seconds : null, opened, stderr };
 }
 
 export async function probeDuration(source: string): Promise<number | null> {
@@ -132,11 +134,11 @@ export function spreadOverTime(frames: Frame[], maxFrames: number): Frame[] {
 }
 
 export const sampleFrames: FrameSampler = async (source, options) => {
-  const { seconds: duration, stderr } = await probe(source);
+  const { seconds: duration, opened, stderr } = await probe(source);
+  const detail = redactUrls(stderr.trim()).slice(0, 500);
+  if (!opened) throw new Error(`ffmpeg could not open the recording: ${detail}`);
   if (duration === null) {
-    throw new Error(
-      `ffmpeg read no duration for the recording, so its coverage cannot be bounded: ${redactUrls(stderr.trim()).slice(0, 500)}`,
-    );
+    throw new Error(`ffmpeg read no duration for the recording, so its coverage cannot be bounded: ${detail}`);
   }
   const interval = coverageInterval(duration, options.maxFrames);
   const spacing = sceneSpacing(duration, interval);
@@ -177,6 +179,12 @@ export const sampleFrames: FrameSampler = async (source, options) => {
           : [readFile(join(dir, file)).then((jpeg) => ({ offsetSeconds, jpeg }))];
       }),
     );
+    const reached = frames.at(-1)?.offsetSeconds ?? 0;
+    if (duration - reached >= interval + spacing) {
+      throw new Error(
+        `the last frame ffmpeg found was at ${reached.toFixed(1)}s of a recording reporting ${duration.toFixed(1)}s, so the clip ends before it says it does`,
+      );
+    }
     return spreadOverTime(frames, options.maxFrames);
   } finally {
     await rm(dir, { recursive: true, force: true });

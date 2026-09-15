@@ -370,8 +370,12 @@ filmed, the whole chain works and you are the first person to have proved it.
   A clip that reports a length shorter than the truth usually still analyses correctly — ffmpeg
   reads to the real end either way — and is refused only when the understated length packs the
   frames tightly enough to hit the decode ceiling first: *the clip runs past what was sampled*.
-  Report either refusal; both mean the container is lying about its own length, and the footage
-  itself is probably fine.
+  A clip whose container claims to be *longer* than its video is refused the other way — *the clip
+  ends before it says it does* — because a wildly overstated length spreads the frame budget so
+  thinly that a ten-minute clip gets three frames. Report any of these three; they all mean the
+  container is lying about its own length, and the footage itself is probably fine. A fourth
+  message, *ffmpeg could not open the recording*, is not about the container at all — that is a
+  signed URL that has expired, a network problem, or a missing object, and the clip is untouched.
   Neither is the fix for a long clip that produced events only near the start. Report that symptom
   rather than tuning it away — on real body worn footage nobody has seen it yet, and what it means
   is worth knowing.
