@@ -97,8 +97,10 @@ than the 400 frames it will decode, whatever `ANALYSIS_SCENE_THRESHOLD` and `ANA
 are set to. The interval stops shrinking at `ANALYSIS_MAX_FRAMES` of 399, so no budget above 400
 returns more than 400 frames.
 
-Both floors are derived from the clip's duration, so **a recording whose duration ffmpeg cannot read
-keeps none of this**. There the sampler falls back to scene changes alone and a low threshold can
+Both floors are derived from the clip's duration, so **a recording whose duration ffmpeg cannot read,
+or reads short, keeps none of this**. A container that under-reports its length — an offload cut off
+part-way, a fragmented MP4 with a stale `mvhd` — floors the interval too low and can still fill the
+ceiling before the real end. There the sampler falls back to scene changes alone and a low threshold can
 still fill the ceiling early. Nothing detects or reports that today, and no clip this repo has seen
 has ever reported an unreadable duration.
 

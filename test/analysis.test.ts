@@ -256,7 +256,7 @@ describe("a complete recording becoming events", () => {
 });
 
 describe("mapping what the model said onto the frames it saw", () => {
-  const frames = [0, 2.5, 7].map((offsetSeconds) => ({ offsetSeconds, sceneChange: false, jpeg: Buffer.alloc(0) }));
+  const frames = [0, 2.5, 7].map((offsetSeconds) => ({ offsetSeconds, jpeg: Buffer.alloc(0) }));
   const startTime = new Date("2026-09-08T17:00:00Z");
 
   it("orders events by offset and derives wall-clock from the recording start", () => {

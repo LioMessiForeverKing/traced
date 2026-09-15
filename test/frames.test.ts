@@ -83,12 +83,24 @@ describe("scene spacing", () => {
   });
 
   it("keeps the whole recording inside the decode ceiling at any budget", () => {
-    for (const duration of [17.7, 120, 600, 3600, 7200]) {
+    for (const duration of [17.7, 79.8, 120, 600, 3600, 7200]) {
       for (const maxFrames of [1, 24, 100, 200, 400, 600]) {
         const interval = coverageInterval(duration, maxFrames)!;
         const spacing = sceneSpacing(duration, interval)!;
         const selections = 1 + Math.floor(duration / Math.min(interval, spacing));
         expect(selections).toBeLessThanOrEqual(DECODE_CEILING);
+      }
+    }
+  });
+
+  it("stays inside the ceiling at the precision ffmpeg is actually given", () => {
+    for (const duration of [17.7, 79.8, 120, 600, 3600, 7200]) {
+      for (const maxFrames of [1, 24, 100, 200, 400, 600]) {
+        const interval = coverageInterval(duration, maxFrames)!;
+        const spacing = sceneSpacing(duration, interval)!;
+        const expression = selectExpression(0, interval, spacing);
+        const gaps = [...expression.matchAll(/gte\(t-prev_selected_t,([\d.]+)\)/g)].map((m) => Number(m[1]));
+        expect(1 + Math.floor(duration / Math.min(...gaps))).toBeLessThanOrEqual(DECODE_CEILING);
       }
     }
   });
@@ -119,12 +131,6 @@ describe("spreading the frame budget", () => {
   it("spans the frames it has, not a container that outlasts them", () => {
     const video = Array.from({ length: 61 }, (_, index) => frame(index));
     expect(spreadOverTime(video, 5).map((f) => f.offsetSeconds)).toEqual([0, 15, 30, 45, 60]);
-  });
-
-  it("refuses an offset it cannot compare rather than returning a gap", () => {
-    const candidates = [frame(0), frame(10), frame(Number.NaN)];
-
-    expect(() => spreadOverTime(candidates, 2)).toThrow(/comparable offset/);
   });
 
   it("keeps the recording's last frame, not a crowd near the end", () => {

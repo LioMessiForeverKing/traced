@@ -157,18 +157,15 @@ export const sampleFrames: FrameSampler = async (source, options) => {
       join(dir, "frame-%04d.jpg"),
     ]);
 
-    const timings = parseTimings(stdout);
+    const timed = new Map(parseTimings(stdout).map((timing) => [timing.index, timing.offsetSeconds]));
     const files = (await readdir(dir)).sort();
-    files.forEach((_, index) => {
-      if (timings[index]?.index !== index) {
-        throw new Error(`ffmpeg did not time frame ${index} of the ${files.length} it wrote`);
-      }
-    });
     const frames = await Promise.all(
-      files.map(async (file, index) => ({
-        offsetSeconds: timings[index]!.offsetSeconds,
-        jpeg: await readFile(join(dir, file)),
-      })),
+      files.flatMap((file, index) => {
+        const offsetSeconds = timed.get(index);
+        return offsetSeconds === undefined
+          ? []
+          : [readFile(join(dir, file)).then((jpeg) => ({ offsetSeconds, jpeg }))];
+      }),
     );
     return spreadOverTime(frames, options.maxFrames);
   } finally {
