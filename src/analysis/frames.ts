@@ -22,6 +22,7 @@ export type FrameSampler = (source: string, options: SampleOptions) => Promise<F
 const FFMPEG = ffmpegStatic as unknown as string | null;
 
 export const DECODE_CEILING = 400;
+const DECODE_REQUEST = DECODE_CEILING + 1;
 const MIN_INTERVAL_SECONDS = 1;
 const SCENE_SPACING_DIVISOR = 4;
 const FRAME_LINE = /^frame:(\d+)\s+pts:\S+\s+pts_time:(-?[\d.]+)/gm;
@@ -155,7 +156,7 @@ export const sampleFrames: FrameSampler = async (source, options) => {
       "-fps_mode",
       "passthrough",
       "-frames:v",
-      String(DECODE_CEILING),
+      String(DECODE_REQUEST),
       "-q:v",
       "4",
       join(dir, "frame-%04d.jpg"),

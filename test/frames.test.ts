@@ -99,6 +99,16 @@ describe("scene spacing", () => {
     expect(selectionCeiling(7200, null, null)).toBe(DECODE_CEILING - 1);
   });
 
+  it("never allows a correct recording to reach the frame ffmpeg is asked for", () => {
+    for (const duration of [17.7, 79.8, 120, 600, 3600, 7200]) {
+      for (const maxFrames of [1, 24, 100, 200, 400, 600]) {
+        const interval = coverageInterval(duration, maxFrames)!;
+        const spacing = sceneSpacing(duration, interval)!;
+        expect(selectionCeiling(duration, interval, spacing)).toBeLessThanOrEqual(DECODE_CEILING);
+      }
+    }
+  });
+
   it("allows exactly what a correctly described recording can produce", () => {
     const interval = coverageInterval(7200, 24)!;
     const spacing = sceneSpacing(7200, interval)!;
