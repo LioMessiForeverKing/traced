@@ -367,10 +367,11 @@ filmed, the whole chain works and you are the first person to have proved it.
   and the interval does the work. Lowering it is safe on any clip whose duration ffmpeg can read, and
   every clip so far has been one. A clip whose container reports `Duration: N/A` is refused outright
   — *ffmpeg read no duration* — because without a length there is nothing to spread a budget over.
-  A clip that reports a length shorter than the truth is refused differently: both floors are
-  computed from the too-small number, the gates come out too tight, and the extra frame that
-  arrives proves the point — *the clip runs past what was sampled*. Report either; both mean the
-  container is lying about its own length, and the footage itself is probably fine.
+  A clip that reports a length shorter than the truth usually still analyses correctly — ffmpeg
+  reads to the real end either way — and is refused only when the understated length packs the
+  frames tightly enough to hit the decode ceiling first: *the clip runs past what was sampled*.
+  Report either refusal; both mean the container is lying about its own length, and the footage
+  itself is probably fine.
   Neither is the fix for a long clip that produced events only near the start. Report that symptom
   rather than tuning it away — on real body worn footage nobody has seen it yet, and what it means
   is worth knowing.

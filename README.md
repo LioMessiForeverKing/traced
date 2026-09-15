@@ -102,13 +102,15 @@ gets no record at all**. Without a duration there is no interval, scene detectio
 almost nothing in continuous footage, and the sampler would hand the extractor a single opening
 frame to stand for a whole shift. It refuses instead, naming what ffmpeg said about the container.
 
-A container that reports a length *shorter* than the truth is a subtler version of the same thing:
-both floors are computed, just from a number too small, so the gates come out too tight and ffmpeg
-selects past the end of what was claimed. That is what the decode ceiling catches — the sampler asks
-for one frame more than a correctly described recording can produce, and receiving it proves the
-clip runs past what was sampled. Either way the analysis fails and retries, which is the honest
-answer: a record claiming a whole shift on the strength of its opening minutes is worse than no
-record.
+A container that reports a length *shorter* than the truth is a milder problem than it sounds.
+Both floors are computed from the too-small number, so the gates come out tighter than intended and
+more frames are taken than the budget asked for — but ffmpeg still reads to the real end of the
+file, and the budget is spent across the offsets that actually came back, so the record still covers
+the whole shift. It only turns harmful when the gates are tight enough to hit the decode ceiling
+before the clip ends, and that is the case the sampler refuses: it asks ffmpeg for one frame beyond
+the ceiling, and receiving that frame is proof the clip was still going. The analysis fails and
+retries, which is the honest answer — a record claiming a whole shift on the strength of its
+opening minutes is worse than no record.
 
 A failed analysis is retried. `analysis_attempts` counts every failure, and the claim query picks a
 failed recording back up once ten minutes have passed, up to three attempts. That matters because

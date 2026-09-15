@@ -7,7 +7,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   DECODE_CEILING,
   coverageInterval,
-  selectionCeiling,
   probeDuration,
   sampleFrames,
   sceneSpacing,
@@ -82,36 +81,6 @@ describe("scene spacing", () => {
         expect(selections).toBeLessThanOrEqual(DECODE_CEILING);
       }
     }
-  });
-
-  it("never allows a correct recording to reach the frame ffmpeg is asked for", () => {
-    for (const duration of [17.7, 79.8, 120, 600, 3600, 7200]) {
-      for (const maxFrames of [1, 24, 100, 200, 400, 600]) {
-        const interval = coverageInterval(duration, maxFrames);
-        const spacing = sceneSpacing(duration, interval);
-        expect(selectionCeiling(duration, interval, spacing)).toBeLessThanOrEqual(DECODE_CEILING);
-      }
-    }
-  });
-
-  it("permits every frame the expression it hands ffmpeg can actually emit", () => {
-    for (const maxFrames of [24, 50, 100, 200, 400, 600]) {
-      for (let step = 0; step < 400; step += 1) {
-        const duration = 1 + (step * 7199) / 399;
-        const interval = coverageInterval(duration, maxFrames);
-        const spacing = sceneSpacing(duration, interval);
-        const expression = selectExpression(0, interval, spacing);
-        const gaps = [...expression.matchAll(/gte\(t-prev_selected_t,([\d.]+)\)/g)].map((m) => Number(m[1]));
-        const emitted = Math.min(1 + Math.floor(duration / Math.min(...gaps)), DECODE_CEILING + 1);
-        expect(emitted).toBeLessThanOrEqual(selectionCeiling(duration, interval, spacing));
-      }
-    }
-  });
-
-  it("allows exactly what a correctly described recording can produce", () => {
-    const interval = coverageInterval(7200, 24);
-    const spacing = sceneSpacing(7200, interval);
-    expect(selectionCeiling(7200, interval, spacing)).toBe(1 + Math.floor(7200 / Math.min(interval, spacing)));
   });
 
   it("stays inside the ceiling at the precision ffmpeg is actually given", () => {

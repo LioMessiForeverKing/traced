@@ -80,11 +80,6 @@ export function coverageInterval(duration: number, maxFrames: number): number {
   return Math.max(MIN_INTERVAL_SECONDS, duration / Math.max(1, maxFrames), ceilingSpacing(duration));
 }
 
-export function selectionCeiling(duration: number, interval: number, spacing: number): number {
-  const gate = Math.min(Number(interval.toFixed(GATE_DECIMALS)), Number(spacing.toFixed(GATE_DECIMALS)));
-  return Math.min(DECODE_CEILING, 1 + Math.floor(duration / gate));
-}
-
 export function sceneSpacing(duration: number, interval: number): number {
   return Math.max(interval / SCENE_SPACING_DIVISOR, ceilingSpacing(duration));
 }
@@ -169,9 +164,9 @@ export const sampleFrames: FrameSampler = async (source, options) => {
     if (files.length > 0 && timed.size === 0) {
       throw new Error(`ffmpeg wrote ${files.length} frames and printed no timings this build could read`);
     }
-    if (files.length > selectionCeiling(duration, interval, spacing)) {
+    if (files.length >= DECODE_REQUEST) {
       throw new Error(
-        `sampled ${files.length} frames from a recording reporting ${duration ?? "no"} seconds, so the clip runs past what was sampled`,
+        `ffmpeg was still finding frames at the ${DECODE_REQUEST}th, so the clip runs past what was sampled`,
       );
     }
     const frames = await Promise.all(
