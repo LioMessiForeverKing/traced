@@ -180,7 +180,10 @@ export const sampleFrames: FrameSampler = async (source, options) => {
       }),
     );
     const reached = frames.at(-1)?.offsetSeconds ?? 0;
-    if (duration - reached >= interval + spacing) {
+    const granularity = frames
+      .slice(1)
+      .reduce((widest, frame, index) => Math.max(widest, frame.offsetSeconds - frames[index]!.offsetSeconds), 0);
+    if (duration - reached >= interval + spacing + granularity) {
       throw new Error(
         `the last frame ffmpeg found was at ${reached.toFixed(1)}s of a recording reporting ${duration.toFixed(1)}s, so the clip ends before it says it does`,
       );

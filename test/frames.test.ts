@@ -152,6 +152,20 @@ describe("a recording whose length cannot be read", () => {
   }, 60_000);
 });
 
+describe("a recording whose own frames are far apart", () => {
+  it("is not mistaken for one that stopped early", async () => {
+    const lapse = join(dir, "lapse.mp4");
+    await ffmpeg([
+      "-hide_banner", "-loglevel", "error",
+      "-f", "lavfi", "-i", `testsrc2=duration=${DURATION_SECONDS}:size=320x240:rate=0.4`,
+      "-pix_fmt", "yuv420p", "-r", "0.4", lapse,
+    ]);
+
+    const frames = await sampleFrames(lapse, { maxFrames: 24, sceneThreshold: 0.4, width: 320 });
+    expect(frames.length).toBeGreaterThan(1);
+  }, 120_000);
+});
+
 describe("a recording that ends before its container says", () => {
   it("is refused rather than filed as a sparse shift", async () => {
     const padded = join(dir, "padded.mp4");
