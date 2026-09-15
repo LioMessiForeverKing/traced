@@ -66,14 +66,18 @@ export async function probeDuration(source: string): Promise<number | null> {
   return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
 }
 
+function ceilingSpacing(duration: number): number {
+  return duration / (DECODE_CEILING - 1);
+}
+
 export function coverageInterval(duration: number | null, maxFrames: number): number | null {
   if (duration === null || maxFrames < 1) return null;
-  return Math.max(MIN_INTERVAL_SECONDS, duration / maxFrames);
+  return Math.max(MIN_INTERVAL_SECONDS, duration / maxFrames, ceilingSpacing(duration));
 }
 
 export function sceneSpacing(duration: number | null, interval: number | null): number | null {
   if (duration === null || interval === null) return null;
-  return Math.max(interval / SCENE_SPACING_DIVISOR, duration / DECODE_CEILING);
+  return Math.max(interval / SCENE_SPACING_DIVISOR, ceilingSpacing(duration));
 }
 
 export function selectExpression(

@@ -82,12 +82,13 @@ describe("scene spacing", () => {
     expect(sceneSpacing(7200, null)).toBeNull();
   });
 
-  it("keeps the whole recording inside the decode ceiling at any threshold", () => {
+  it("keeps the whole recording inside the decode ceiling at any budget", () => {
     for (const duration of [17.7, 120, 600, 3600, 7200]) {
-      for (const maxFrames of [1, 24, 200, 600]) {
+      for (const maxFrames of [1, 24, 100, 200, 400, 600]) {
         const interval = coverageInterval(duration, maxFrames)!;
         const spacing = sceneSpacing(duration, interval)!;
-        expect(duration / spacing).toBeLessThanOrEqual(DECODE_CEILING);
+        const selections = 1 + Math.floor(duration / Math.min(interval, spacing));
+        expect(selections).toBeLessThanOrEqual(DECODE_CEILING);
       }
     }
   });

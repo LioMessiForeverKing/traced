@@ -359,11 +359,12 @@ filmed, the whole chain works and you are the first person to have proved it.
   from a moving worker is that nobody knows yet.
 - **Is the frame sampling covering the clip?** Body worn footage is one continuous shot and never
   cuts, so scene detection alone finds almost nothing in it. Frames are also taken at
-  `duration ÷ ANALYSIS_MAX_FRAMES` intervals, which is what covers the whole recording, and the
-  default `ANALYSIS_SCENE_THRESHOLD` of `0.4` measured best of six values on the one real clip we
-  have. Lowering it adds frames where the view changes; it is safe but it is not the fix for a long
-  clip that produced events only near the start. Report that symptom rather than tuning it away —
-  on real body worn footage nobody has seen it yet, and what it means is worth knowing.
+  `duration ÷ ANALYSIS_MAX_FRAMES` intervals, which is what covers the whole recording. The default
+  `ANALYSIS_SCENE_THRESHOLD` of `0.4` is ffmpeg's conventional scene-cut figure, calibrated for
+  footage with hard cuts, which this is not — so it contributes almost nothing on body worn video
+  and the interval does the work. Lowering it is safe but it is not the fix for a long clip that
+  produced events only near the start. Report that symptom rather than tuning it away — on real body
+  worn footage nobody has seen it yet, and what it means is worth knowing.
 
 ---
 
