@@ -117,7 +117,6 @@ export function spreadOverTime(frames: Frame[], maxFrames: number): Frame[] {
   const chosen: Frame[] = [frames[0]!];
   for (let slot = 1; slot < maxFrames; slot += 1) {
     const target = first + (span * slot) / (maxFrames - 1);
-    const reaches = slot === 1 ? first : target - tolerance;
     let nearest = -1;
     let nearestDistance = Infinity;
     let scene = -1;
@@ -130,7 +129,7 @@ export function spreadOverTime(frames: Frame[], maxFrames: number): Frame[] {
         nearestDistance = distance;
         nearest = index;
       }
-      const within = offset >= reaches && offset <= target + tolerance;
+      const within = offset >= target - tolerance && offset <= target + tolerance;
       if (frames[index]!.sceneChange && within && distance < sceneDistance) {
         sceneDistance = distance;
         scene = index;
@@ -169,8 +168,8 @@ export const sampleFrames: FrameSampler = async (source, options) => {
 
     const selections = parseSelections(stdout);
     const files = (await readdir(dir)).sort();
-    if (selections.length !== files.length) {
-      throw new Error(`ffmpeg timed ${selections.length} frames but wrote ${files.length}`);
+    if (files.length > selections.length) {
+      throw new Error(`ffmpeg wrote ${files.length} frames but timed ${selections.length}`);
     }
     const frames = await Promise.all(
       files.map(async (file, index) => ({
