@@ -23,6 +23,7 @@ const FFMPEG = ffmpegStatic as unknown as string | null;
 
 export const DECODE_CEILING = 400;
 const DECODE_REQUEST = DECODE_CEILING + 1;
+const GATE_DECIMALS = 3;
 const MIN_INTERVAL_SECONDS = 1;
 const SCENE_SPACING_DIVISOR = 4;
 const FRAME_LINE = /^frame:(\d+)\s+pts:\S+\s+pts_time:(-?[\d.]+)/gm;
@@ -78,7 +79,8 @@ export function coverageInterval(duration: number | null, maxFrames: number): nu
 
 export function selectionCeiling(duration: number | null, interval: number | null, spacing: number | null): number {
   if (duration === null || interval === null || spacing === null) return DECODE_CEILING - 1;
-  return 1 + Math.floor(duration / Math.min(interval, spacing));
+  const gate = Math.min(Number(interval.toFixed(GATE_DECIMALS)), Number(spacing.toFixed(GATE_DECIMALS)));
+  return Math.min(DECODE_CEILING, 1 + Math.floor(duration / gate));
 }
 
 export function sceneSpacing(duration: number | null, interval: number | null): number | null {
@@ -94,9 +96,9 @@ export function selectExpression(
   const scene =
     spacing === null
       ? `gt(scene,${sceneThreshold})`
-      : `gt(scene,${sceneThreshold})*gte(t-prev_selected_t,${spacing.toFixed(3)})`;
+      : `gt(scene,${sceneThreshold})*gte(t-prev_selected_t,${spacing.toFixed(GATE_DECIMALS)})`;
   const terms = ["eq(n,0)", scene];
-  if (interval !== null) terms.push(`gte(t-prev_selected_t,${interval.toFixed(3)})`);
+  if (interval !== null) terms.push(`gte(t-prev_selected_t,${interval.toFixed(GATE_DECIMALS)})`);
   return terms.join("+");
 }
 
@@ -164,6 +166,9 @@ export const sampleFrames: FrameSampler = async (source, options) => {
 
     const timed = new Map(parseTimings(stdout).map((timing) => [timing.index, timing.offsetSeconds]));
     const files = (await readdir(dir)).sort();
+    if (files.length > 0 && timed.size === 0) {
+      throw new Error(`ffmpeg wrote ${files.length} frames and printed no timings this build could read`);
+    }
     if (files.length > selectionCeiling(duration, interval, spacing)) {
       throw new Error(
         `sampled ${files.length} frames from a recording reporting ${duration ?? "no"} seconds, so the clip runs past what was sampled`,

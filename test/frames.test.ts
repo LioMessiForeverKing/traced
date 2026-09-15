@@ -109,6 +109,20 @@ describe("scene spacing", () => {
     }
   });
 
+  it("permits every frame the expression it hands ffmpeg can actually emit", () => {
+    for (const maxFrames of [24, 50, 100, 200, 400, 600]) {
+      for (let step = 0; step < 400; step += 1) {
+        const duration = 1 + (step * 7199) / 399;
+        const interval = coverageInterval(duration, maxFrames)!;
+        const spacing = sceneSpacing(duration, interval)!;
+        const expression = selectExpression(0, interval, spacing);
+        const gaps = [...expression.matchAll(/gte\(t-prev_selected_t,([\d.]+)\)/g)].map((m) => Number(m[1]));
+        const emitted = Math.min(1 + Math.floor(duration / Math.min(...gaps)), DECODE_CEILING + 1);
+        expect(emitted).toBeLessThanOrEqual(selectionCeiling(duration, interval, spacing));
+      }
+    }
+  });
+
   it("allows exactly what a correctly described recording can produce", () => {
     const interval = coverageInterval(7200, 24)!;
     const spacing = sceneSpacing(7200, interval)!;
