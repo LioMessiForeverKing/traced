@@ -75,6 +75,11 @@ export function coverageInterval(duration: number | null, maxFrames: number): nu
   return Math.max(MIN_INTERVAL_SECONDS, duration / maxFrames, ceilingSpacing(duration));
 }
 
+export function selectionCeiling(duration: number | null, interval: number | null, spacing: number | null): number {
+  if (duration === null || interval === null || spacing === null) return DECODE_CEILING - 1;
+  return 1 + Math.floor(duration / Math.min(interval, spacing));
+}
+
 export function sceneSpacing(duration: number | null, interval: number | null): number | null {
   if (duration === null || interval === null) return null;
   return Math.max(interval / SCENE_SPACING_DIVISOR, ceilingSpacing(duration));
@@ -127,7 +132,6 @@ export function spreadOverTime(frames: Frame[], maxFrames: number): Frame[] {
         best = index;
       }
     }
-    if (best < 0) throw new Error(`frame ${slot} of ${maxFrames} has no comparable offset`);
     taken.add(best);
     chosen.push(frames[best]!);
   }
@@ -149,7 +153,7 @@ export const sampleFrames: FrameSampler = async (source, options) => {
       "-vf",
       `select='${selectExpression(options.sceneThreshold, interval, spacing)}',metadata=print:file=-,scale=${options.width}:-2`,
       "-fps_mode",
-      "vfr",
+      "passthrough",
       "-frames:v",
       String(DECODE_CEILING),
       "-q:v",
@@ -159,6 +163,11 @@ export const sampleFrames: FrameSampler = async (source, options) => {
 
     const timed = new Map(parseTimings(stdout).map((timing) => [timing.index, timing.offsetSeconds]));
     const files = (await readdir(dir)).sort();
+    if (files.length > selectionCeiling(duration, interval, spacing)) {
+      throw new Error(
+        `sampled ${files.length} frames from a recording reporting ${duration ?? "no"} seconds, so the clip runs past what was sampled`,
+      );
+    }
     const frames = await Promise.all(
       files.flatMap((file, index) => {
         const offsetSeconds = timed.get(index);

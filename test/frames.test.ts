@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   DECODE_CEILING,
   coverageInterval,
+  selectionCeiling,
   probeDuration,
   sampleFrames,
   sceneSpacing,
@@ -91,6 +92,17 @@ describe("scene spacing", () => {
         expect(selections).toBeLessThanOrEqual(DECODE_CEILING);
       }
     }
+  });
+
+  it("treats an unbounded sample that reaches the cap as truncated", () => {
+    expect(selectionCeiling(null, null, null)).toBe(DECODE_CEILING - 1);
+    expect(selectionCeiling(7200, null, null)).toBe(DECODE_CEILING - 1);
+  });
+
+  it("allows exactly what a correctly described recording can produce", () => {
+    const interval = coverageInterval(7200, 24)!;
+    const spacing = sceneSpacing(7200, interval)!;
+    expect(selectionCeiling(7200, interval, spacing)).toBe(1 + Math.floor(7200 / Math.min(interval, spacing)));
   });
 
   it("stays inside the ceiling at the precision ffmpeg is actually given", () => {

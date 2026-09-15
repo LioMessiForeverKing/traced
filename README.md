@@ -100,9 +100,10 @@ returns more than 400 frames.
 Both floors are derived from the clip's duration, so **a recording whose duration ffmpeg cannot read,
 or reads short, keeps none of this**. A container that under-reports its length — an offload cut off
 part-way, a fragmented MP4 with a stale `mvhd` — floors the interval too low and can still fill the
-ceiling before the real end. There the sampler falls back to scene changes alone and a low threshold can
-still fill the ceiling early. Nothing detects or reports that today, and no clip this repo has seen
-has ever reported an unreadable duration.
+ceiling before the real end. That case is now refused rather than analysed: the sampler knows how
+many frames a correctly described recording can produce, and more than that means the clip runs past
+what was sampled. The analysis fails and retries, which is the honest answer — a record claiming a
+whole shift on the strength of its opening minutes is worse than no record.
 
 A failed analysis is retried. `analysis_attempts` counts every failure, and the claim query picks a
 failed recording back up once ten minutes have passed, up to three attempts. That matters because
