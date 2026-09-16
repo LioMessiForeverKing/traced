@@ -396,7 +396,7 @@ describe("refusing an analysis that cannot succeed", () => {
     const store = await completeRecording();
     const loop = loopWhoseSamplerThrows(
       store,
-      new UnanalysableRecording("ffmpeg read no duration for the recording"),
+      new UnanalysableRecording("ffmpeg was still finding frames at the 401th"),
     );
 
     expect(await loop.runOnce()).toBe(RECORDING);
@@ -404,7 +404,7 @@ describe("refusing an analysis that cannot succeed", () => {
     const recording = store.recordings.get(RECORDING)!;
     expect(recording.analysisStatus).toBe("refused");
     expect(recording.analysisAttempts).toBe(1);
-    expect(recording.analysisError).toMatch(/read no duration/);
+    expect(recording.analysisError).toMatch(/still finding frames/);
 
     const longAfterBackoff = new Date(recording.analysedAt!.getTime() + RETRY_AFTER_MS * 10);
     expect(await store.claimForAnalysis(longAfterBackoff)).toBeNull();
@@ -450,6 +450,6 @@ describe("refusing an analysis that cannot succeed", () => {
     }
 
     expect(await readsBeforeItStops(new Error("openai is down"))).toBe(MAX_ANALYSIS_ATTEMPTS);
-    expect(await readsBeforeItStops(new UnanalysableRecording("ffmpeg read no duration"))).toBe(1);
+    expect(await readsBeforeItStops(new UnanalysableRecording("frames ran past the ceiling"))).toBe(1);
   });
 });

@@ -371,11 +371,12 @@ filmed, the whole chain works and you are the first person to have proved it.
   reads to the real end either way — and is refused only when the understated length packs the
   frames tightly enough to hit the decode ceiling first: *the clip runs past what was sampled*.
   Report either; both mean the container is lying about its own length, and the footage itself is
-  probably fine. Both also land the recording in `refused` on the first attempt rather than `failed`,
-  because a second read of the same bytes reaches the same verdict. A third message, *ffmpeg could
-  not open the recording*, is not about the container at all — that is a signed URL that has expired,
-  a network problem, or a missing object, and the clip is untouched; that one keeps all three
-  retries, because a broken file and a Storage outage are indistinguishable at that point. A container claiming to be *longer* than its video is not refused: the whole
+  probably fine. Both keep their three retries: *no duration* in particular is not proof of a bad
+  clip, since a healthy stream fetched over HTTP can report `Duration: N/A` purely because its length
+  needs a seek to the end. Only *the clip runs past what was sampled* is terminal, because ffmpeg got
+  to the end of the clip to say it. A third message, *ffmpeg could not open the recording*, is not
+  about the container at all — that is a signed URL that has expired, a network problem, or a missing
+  object, and the clip is untouched; it retries too. A container claiming to be *longer* than its video is not refused: the whole
   video is still covered, just with fewer frames than the budget allows, so a clip whose events look
   unusually thin is worth checking its declared length against its real one.
   Neither is the fix for a long clip that produced events only near the start. Report that symptom
@@ -392,7 +393,7 @@ filmed, the whole chain works and you are the first person to have proved it.
 | `401` when the controller tries to log in | `CD_USERNAME` / `CD_PASSWORD` no longer match the connection file | Regenerate with `npm run connection-file` and re-upload it. |
 | Upload fails around 50 MB | Supabase free plan's per-upload cap | Upgrade to Pro. No code change helps. |
 | `analysis_status` is `failed` | Almost never the clip. An OpenAI outage, a network blip, a timeout | Nothing to do. It retries three times, ten minutes apart; `analysis_attempts` counts them. **The footage is intact in Storage either way** — a failed analysis never means lost evidence. |
-| `analysis_status` is `refused` | The sampler proved this clip cannot be analysed — no readable duration, unreadable frame timings, or longer than the decode ceiling | Retrying costs a re-download and cannot change the answer, so it does not retry. **The footage is still intact in Storage.** Read `analysis_error` for which of the three it was. |
+| `analysis_status` is `refused` | ffmpeg read the whole clip and the result was still unusable — unreadable frame timings, or frames still coming at the decode ceiling | Retrying re-downloads the clip to reach the same verdict, so it does not retry. **The footage is still intact in Storage.** Read `analysis_error` for which of the two it was, and report it. |
 | `moov atom not found` | Not a real video — usually `fake-w800` with no clip argument | Pass a real MP4. |
 | Dashboard is empty but rows exist in Supabase | The signed-in account is a member of nothing, or of a different project | `npm run grant-access -- <email>`. It defaults to `PROJECT_ID`, which is the project this intake is actually stamping on its rows. |
 | A `viewer` cannot play a clip | Working as designed | Viewers read the record and never reach the footage. Grant `member` if that person should see video. |

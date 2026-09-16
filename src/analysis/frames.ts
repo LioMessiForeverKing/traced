@@ -4,6 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 
+/**
+ * Thrown only once ffmpeg has decoded the clip through and the result is still unusable, so the
+ * bytes demonstrably arrived and a retry would reach the same verdict. Anything that fails before
+ * that stays an ordinary Error: a reset transfer and a broken file are not distinguishable there.
+ */
 export class UnanalysableRecording extends Error {
   readonly name = "UnanalysableRecording";
 }
@@ -142,9 +147,7 @@ export const sampleFrames: FrameSampler = async (source, options) => {
   const detail = redactUrls(stderr.trim()).slice(0, 500);
   if (!opened) throw new Error(`ffmpeg could not open the recording: ${detail}`);
   if (duration === null) {
-    throw new UnanalysableRecording(
-      `ffmpeg read no duration for the recording, so its coverage cannot be bounded: ${detail}`,
-    );
+    throw new Error(`ffmpeg read no duration for the recording, so its coverage cannot be bounded: ${detail}`);
   }
   const interval = coverageInterval(duration, options.maxFrames);
   const spacing = sceneSpacing(duration, interval);

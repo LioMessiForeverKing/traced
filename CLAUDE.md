@@ -41,13 +41,15 @@ The wider picture is in `Projects/Traced.md`; the design language with real toke
   is no longer untried code.
 - **A failed analysis retries three times, ten minutes apart**, counted in
   `recordings.analysis_attempts`. The clip is rarely what failed; an outage marks a recording failed
-  while its footage is intact, and before this that lost a shift permanently. **A refusal the sampler
-  can prove will not change skips the retries**: `frames.ts` throws `UnanalysableRecording` for a
-  container it opened but read no duration from, frame timings this build cannot read, and a clip
-  still yielding frames at the decode ceiling, and `loop.ts` writes `analysis_status = 'refused'`,
-  which the claim query never picks up. *ffmpeg could not open the recording* is deliberately not in
-  that set — a corrupt file and a Storage `503` both arrive with no `Input #0`, measured, so refusing
-  on it would discard intact footage on a network blip. Nothing moves a `refused` row back by itself.
+  while its footage is intact, and before this that lost a shift permanently. **A failure that cannot come out
+  differently skips the retries**: `frames.ts` throws `UnanalysableRecording` and `loop.ts` writes
+  `analysis_status = 'refused'`, which the claim query never picks up. The line is the decode, not
+  the symptom — only a clip ffmpeg read through and exited cleanly on, whose result is still
+  unusable, is refused (unparseable frame timings; frames still coming at the decode ceiling).
+  Everything earlier retries, measured 2026-09-15: a reset MP4 transfer prints no `Input #0`, exactly
+  like a Storage `503`, and `Duration: N/A` is not a property of the recording at all — a *healthy*
+  MPEG-TS over HTTP reports it, because its length needs a seek to the end. Nothing moves a `refused`
+  row back by itself.
 - **Frame sampling covers the whole clip, not just its start.** Scene detection alone finds nothing
   in body worn footage, which never cuts — at the default threshold any clip, 17 seconds or two
   hours, yielded exactly one frame. `frames.ts` now also takes a frame every

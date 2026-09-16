@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ffmpegStatic from "ffmpeg-static";
@@ -141,7 +141,7 @@ describe("spreading the frame budget", () => {
 });
 
 describe("a recording whose length cannot be read", () => {
-  it("is refused rather than sampled from its opening frame", async () => {
+  it("is rejected rather than sampled from its opening frame", async () => {
     const raw = join(dir, "headless.h264");
     await ffmpeg([
       "-hide_banner", "-loglevel", "error",
@@ -150,11 +150,38 @@ describe("a recording whose length cannot be read", () => {
     ]);
 
     expect(await probeDuration(raw)).toBeNull();
-    const refusal = await sampleFrames(raw, SAMPLE).catch((error: unknown) => error);
+    const failure = await sampleFrames(raw, SAMPLE).catch((error: unknown) => error);
 
-    expect(refusal).toBeInstanceOf(UnanalysableRecording);
-    expect(String(refusal)).toMatch(/read no duration for the recording/);
+    expect(String(failure)).toMatch(/read no duration for the recording/);
+    expect(failure).not.toBeInstanceOf(UnanalysableRecording);
   }, 60_000);
+
+  it("is retried, because a healthy stream can read no duration over http alone", async () => {
+    const transport = join(dir, "streamable.ts");
+    await ffmpeg([
+      "-hide_banner", "-loglevel", "error",
+      "-f", "lavfi", "-i", `smptebars=duration=${DURATION_SECONDS}:size=320x240:rate=10`,
+      "-pix_fmt", "yuv420p", transport,
+    ]);
+    const bytes = await readFile(transport);
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { "Content-Type": "video/mp2t" });
+      response.end(bytes);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      const served = `http://127.0.0.1:${port}/recordings/clip.ts`;
+      expect(await probeDuration(served)).toBeNull();
+      const failure = await sampleFrames(served, SAMPLE).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(UnanalysableRecording);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }, 120_000);
 });
 
 describe("a recording ffmpeg could not reach", () => {
