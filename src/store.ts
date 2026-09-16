@@ -53,4 +53,5 @@ export interface AnalysisStore {
   clipSource(recording: string): Promise<string | null>;
   finishAnalysis(recording: string, events: AnalysisEvent[]): Promise<void>;
   failAnalysis(recording: string, reason: string): Promise<void>;
+  refuseAnalysis(recording: string, reason: string): Promise<void>;
 }

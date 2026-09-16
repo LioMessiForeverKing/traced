@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 
+export class UnanalysableRecording extends Error {
+  readonly name = "UnanalysableRecording";
+}
+
 export interface Frame {
   offsetSeconds: number;
   jpeg: Buffer;
@@ -138,7 +142,9 @@ export const sampleFrames: FrameSampler = async (source, options) => {
   const detail = redactUrls(stderr.trim()).slice(0, 500);
   if (!opened) throw new Error(`ffmpeg could not open the recording: ${detail}`);
   if (duration === null) {
-    throw new Error(`ffmpeg read no duration for the recording, so its coverage cannot be bounded: ${detail}`);
+    throw new UnanalysableRecording(
+      `ffmpeg read no duration for the recording, so its coverage cannot be bounded: ${detail}`,
+    );
   }
   const interval = coverageInterval(duration, options.maxFrames);
   const spacing = sceneSpacing(duration, interval);
@@ -164,10 +170,12 @@ export const sampleFrames: FrameSampler = async (source, options) => {
     const timed = new Map(parseTimings(stdout).map((timing) => [timing.index, timing.offsetSeconds]));
     const files = (await readdir(dir)).sort();
     if (files.length > 0 && timed.size === 0) {
-      throw new Error(`ffmpeg wrote ${files.length} frames and printed no timings this build could read`);
+      throw new UnanalysableRecording(
+        `ffmpeg wrote ${files.length} frames and printed no timings this build could read`,
+      );
     }
     if (files.length >= DECODE_REQUEST) {
-      throw new Error(
+      throw new UnanalysableRecording(
         `ffmpeg was still finding frames at the ${DECODE_REQUEST}th, so the clip runs past what was sampled`,
       );
     }

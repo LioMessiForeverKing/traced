@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +8,7 @@ import ffmpegStatic from "ffmpeg-static";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   DECODE_CEILING,
+  UnanalysableRecording,
   coverageInterval,
   probeDuration,
   sampleFrames,
@@ -17,6 +20,7 @@ import type { Frame } from "../src/analysis/frames.js";
 
 const FFMPEG = ffmpegStatic as unknown as string;
 const DURATION_SECONDS = 30;
+const SAMPLE = { maxFrames: 24, sceneThreshold: 0.4, width: 320 };
 
 let dir = "";
 let clip = "";
@@ -146,9 +150,33 @@ describe("a recording whose length cannot be read", () => {
     ]);
 
     expect(await probeDuration(raw)).toBeNull();
-    await expect(sampleFrames(raw, { maxFrames: 24, sceneThreshold: 0.4, width: 320 })).rejects.toThrow(
-      /read no duration for the recording/,
-    );
+    const refusal = await sampleFrames(raw, SAMPLE).catch((error: unknown) => error);
+
+    expect(refusal).toBeInstanceOf(UnanalysableRecording);
+    expect(String(refusal)).toMatch(/read no duration for the recording/);
+  }, 60_000);
+});
+
+describe("a recording ffmpeg could not reach", () => {
+  it("is left retryable, because a blip and a broken clip fail the same way", async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(503);
+      response.end("storage is having a moment");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      const signed = `http://127.0.0.1:${port}/recordings/clip.mp4?token=FAKE-TOKEN-VALUE-FOR-TESTS`;
+      const failure = await sampleFrames(signed, SAMPLE).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(UnanalysableRecording);
+      expect(String(failure)).toMatch(/could not open the recording/);
+      expect(String(failure)).not.toMatch(/FAKE-TOKEN-VALUE-FOR-TESTS/);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   }, 60_000);
 });
 

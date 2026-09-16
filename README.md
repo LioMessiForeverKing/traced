@@ -127,6 +127,16 @@ recording failed while its footage sits intact in Storage, and before this a tra
 shift permanently. After three attempts it stays failed rather than retrying a genuinely broken clip
 forever.
 
+A refusal the sampler can prove will not change skips the retries entirely: the recording goes
+straight to `refused`, which the claim query never picks up. That covers a container ffmpeg opened
+but read no duration from, a build whose frame timings this code cannot read, and a clip still
+yielding frames at the decode ceiling — all properties of the recording or of our own binary, so a
+second read of several hundred megabytes from Storage would reach the same answer. A source ffmpeg
+could not open at all stays retryable on purpose: a corrupt file and a Storage `503` both arrive as
+the same "could not open" with no `Input #0`, so refusing on it would throw away intact footage
+whenever the network hiccuped. Nothing moves a `refused` row back; if the sampler's limits change,
+re-queue it by hand.
+
 Tune it with `ANALYSIS_MAX_FRAMES`, `ANALYSIS_SCENE_THRESHOLD`, `ANALYSIS_FRAME_WIDTH` and
 `ANALYSIS_POLL_MS`. Frame budget is the cost lever: frames dominate the bill. `OPENAI_MODEL`
 defaults to `gpt-5.5`; drop to a smaller model for volume without touching code.

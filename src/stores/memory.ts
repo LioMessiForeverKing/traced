@@ -155,4 +155,13 @@ export class MemoryStore implements RecordingStore {
     existing.analysisError = reason;
     existing.analysedAt = new Date();
   }
+
+  async refuseAnalysis(recording: string, reason: string): Promise<void> {
+    const existing = this.recordings.get(recording);
+    if (!existing) return;
+    existing.analysisStatus = "refused";
+    existing.analysisAttempts += 1;
+    existing.analysisError = reason;
+    existing.analysedAt = new Date();
+  }
 }
