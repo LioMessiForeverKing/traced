@@ -373,8 +373,10 @@ filmed, the whole chain works and you are the first person to have proved it.
   Report either; both mean the container is lying about its own length, and the footage itself is
   probably fine. *No duration* keeps its three retries and is not proof of a bad clip at all, since a
   healthy stream fetched over HTTP reports `Duration: N/A` purely because its length needs a seek to
-  the end. Only *the clip runs past what was sampled* is terminal, and only because a transfer that
-  arrived short would have produced fewer frames rather than more. A third message, *ffmpeg could not
+  the end. Of these, only *the clip runs past what was sampled* is terminal, and only because frame
+  selection is causal: a transfer that arrived short produces fewer frames, never more, so reaching
+  the ceiling is a fact about the recording. One further message not in this family is also terminal,
+  *printed no timings this build could read*, which is about the ffmpeg binary rather than the clip. A third message, *ffmpeg could not
   open the recording*, is not about the container at all — that is a signed URL that has expired, a
   network problem, or a missing object, and the clip is untouched; it retries too. A container claiming to be *longer* than its video is not refused: the whole
   video is still covered, just with fewer frames than the budget allows, so a clip whose events look

@@ -4,11 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 
-/**
- * Thrown for the outcomes a short read cannot fake: more frames than the ceiling allows, where a
- * truncated transfer yields fewer and never more, and written frames carrying no timing this build
- * prints, which is a property of the binary. Everything earlier stays a retryable Error.
- */
+/** Thrown only where a short read cannot fake the result: selection is causal, so a truncated
+ * transfer yields fewer frames and never more. Everything else stays a retryable Error. */
 export class UnanalysableRecording extends Error {
   readonly name = "UnanalysableRecording";
 }
