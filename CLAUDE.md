@@ -41,7 +41,16 @@ The wider picture is in `Projects/Traced.md`; the design language with real toke
   is no longer untried code.
 - **A failed analysis retries three times, ten minutes apart**, counted in
   `recordings.analysis_attempts`. The clip is rarely what failed; an outage marks a recording failed
-  while its footage is intact, and before this that lost a shift permanently.
+  while its footage is intact, and before this that lost a shift permanently. **A failure that cannot come out
+  differently skips the retries**: `frames.ts` throws `UnanalysableRecording` and `loop.ts` writes
+  `analysis_status = 'refused'`, which the claim query never picks up. Only two outcomes qualify, and
+  they qualify because a short read cannot produce them: frames still arriving at the decode ceiling
+  (a truncated transfer yields fewer, never more) and written frames with no timing this build prints
+  (a property of the binary). Everything else retries. Measured 2026-09-15, and the reason the bar is
+  this narrow: a reset MP4 transfer prints no `Input #0`, exactly like a Storage `503`; `Duration:
+  N/A` is not a property of the recording, since a *healthy* MPEG-TS over HTTP reports it; and a
+  reset MPEG-TS transfer **exits 0**, so even a clean exit does not prove the bytes arrived. Nothing
+  moves a `refused` row back by itself.
 - **Frame sampling covers the whole clip, not just its start.** Scene detection alone finds nothing
   in body worn footage, which never cuts — at the default threshold any clip, 17 seconds or two
   hours, yielded exactly one frame. `frames.ts` now also takes a frame every

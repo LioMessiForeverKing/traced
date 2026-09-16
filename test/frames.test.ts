@@ -1,11 +1,14 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   DECODE_CEILING,
+  UnanalysableRecording,
   coverageInterval,
   probeDuration,
   sampleFrames,
@@ -17,6 +20,7 @@ import type { Frame } from "../src/analysis/frames.js";
 
 const FFMPEG = ffmpegStatic as unknown as string;
 const DURATION_SECONDS = 30;
+const SAMPLE = { maxFrames: 24, sceneThreshold: 0.4, width: 320 };
 
 let dir = "";
 let clip = "";
@@ -137,7 +141,7 @@ describe("spreading the frame budget", () => {
 });
 
 describe("a recording whose length cannot be read", () => {
-  it("is refused rather than sampled from its opening frame", async () => {
+  it("is rejected rather than sampled from its opening frame", async () => {
     const raw = join(dir, "headless.h264");
     await ffmpeg([
       "-hide_banner", "-loglevel", "error",
@@ -146,10 +150,84 @@ describe("a recording whose length cannot be read", () => {
     ]);
 
     expect(await probeDuration(raw)).toBeNull();
-    await expect(sampleFrames(raw, { maxFrames: 24, sceneThreshold: 0.4, width: 320 })).rejects.toThrow(
-      /read no duration for the recording/,
-    );
+    const failure = await sampleFrames(raw, SAMPLE).catch((error: unknown) => error);
+
+    expect(String(failure)).toMatch(/read no duration for the recording/);
+    expect(failure).not.toBeInstanceOf(UnanalysableRecording);
   }, 60_000);
+
+  it("is retried, because a healthy stream can read no duration over http alone", async () => {
+    const transport = join(dir, "streamable.ts");
+    await ffmpeg([
+      "-hide_banner", "-loglevel", "error",
+      "-f", "lavfi", "-i", `smptebars=duration=${DURATION_SECONDS}:size=320x240:rate=10`,
+      "-pix_fmt", "yuv420p", transport,
+    ]);
+    const bytes = await readFile(transport);
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { "Content-Type": "video/mp2t" });
+      response.end(bytes);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      const served = `http://127.0.0.1:${port}/recordings/clip.ts`;
+      expect(await probeDuration(served)).toBeNull();
+      const failure = await sampleFrames(served, SAMPLE).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(UnanalysableRecording);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }, 120_000);
+});
+
+describe("a recording ffmpeg could not reach", () => {
+  it("is left retryable, because a blip and a broken clip fail the same way", async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(503);
+      response.end("storage is having a moment");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      const signed = `http://127.0.0.1:${port}/recordings/clip.mp4?token=FAKE-TOKEN-VALUE-FOR-TESTS`;
+      const failure = await sampleFrames(signed, SAMPLE).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(UnanalysableRecording);
+      expect(String(failure)).toMatch(/could not open the recording/);
+      expect(String(failure)).not.toMatch(/FAKE-TOKEN-VALUE-FOR-TESTS/);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }, 60_000);
+});
+
+describe("a transfer that dies part-way through", () => {
+  it("is retried rather than refused, whatever exit code ffmpeg gives it", async () => {
+    const bytes = await readFile(clip);
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { "Content-Type": "video/mp4", "Content-Length": String(bytes.length) });
+      response.write(bytes.subarray(0, Math.floor(bytes.byteLength * 0.4)));
+      setTimeout(() => response.socket?.destroy(), 80);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      const cut = `http://127.0.0.1:${port}/recordings/clip.mp4`;
+      const failure = await sampleFrames(cut, SAMPLE).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(UnanalysableRecording);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }, 120_000);
 });
 
 describe("a recording whose own frames are far apart", () => {

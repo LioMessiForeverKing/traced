@@ -7,7 +7,7 @@ import ffmpegStatic from "ffmpeg-static";
 import { createApp } from "../src/app.js";
 import { createAnalysisLoop, toAnalysisEvents } from "../src/analysis/loop.js";
 import type { EventExtractor, ExtractedEvent, ExtractInput } from "../src/analysis/extractor.js";
-import { redactUrls, sampleFrames } from "../src/analysis/frames.js";
+import { UnanalysableRecording, redactUrls, sampleFrames } from "../src/analysis/frames.js";
 import { MAX_ANALYSIS_ATTEMPTS, RETRY_AFTER_MS } from "../src/store.js";
 import { MemoryStore } from "../src/stores/memory.js";
 import { runFakeW800 } from "../src/testing/fake-w800.js";
@@ -359,5 +359,97 @@ describe("retrying a failed analysis", () => {
     store.recordings.get("fresh")!.status = "complete";
 
     expect(await store.claimForAnalysis(new Date())).toMatchObject({ name: "fresh" });
+  });
+});
+
+describe("refusing an analysis that cannot succeed", () => {
+  const RECORDING = "refuse-me";
+
+  async function completeRecording() {
+    const store = new MemoryStore();
+    await store.createRecording(
+      { name: RECORDING, userId: null, deviceSerial: null, triggerOnTime: null, rejected: false },
+      { status: "complete" },
+    );
+    store.recordings.get(RECORDING)!.status = "complete";
+    store.objects.get(RECORDING)!.set("clip", {
+      name: "clip", kind: "clip", contentType: "video/mp4", sizeBytes: 1, meta: {}, bytes: Buffer.alloc(1),
+    });
+    return store;
+  }
+
+  function loopWhoseSamplerThrows(store: MemoryStore, error: Error) {
+    return createAnalysisLoop({
+      store,
+      extractor: extractorReturning([]),
+      sampler: async () => {
+        throw error;
+      },
+      ...SAMPLE,
+      frameWidth: SAMPLE.width,
+      pollMs: 1_000,
+      log: () => {},
+    });
+  }
+
+  it("records the refusal on the first attempt and never claims the recording again", async () => {
+    const store = await completeRecording();
+    const loop = loopWhoseSamplerThrows(
+      store,
+      new UnanalysableRecording("ffmpeg was still finding frames at the 401th"),
+    );
+
+    expect(await loop.runOnce()).toBe(RECORDING);
+
+    const recording = store.recordings.get(RECORDING)!;
+    expect(recording.analysisStatus).toBe("refused");
+    expect(recording.analysisAttempts).toBe(1);
+    expect(recording.analysisError).toMatch(/still finding frames/);
+
+    const longAfterBackoff = new Date(recording.analysedAt!.getTime() + RETRY_AFTER_MS * 10);
+    expect(await store.claimForAnalysis(longAfterBackoff)).toBeNull();
+  });
+
+  it("still retries a failure that only the network explains", async () => {
+    const store = await completeRecording();
+    const loop = loopWhoseSamplerThrows(store, new Error("ffmpeg could not open the recording: 503"));
+
+    expect(await loop.runOnce()).toBe(RECORDING);
+
+    const recording = store.recordings.get(RECORDING)!;
+    expect(recording.analysisStatus).toBe("failed");
+    expect(recording.analysisAttempts).toBe(1);
+
+    const afterBackoff = new Date(recording.analysedAt!.getTime() + RETRY_AFTER_MS + 1_000);
+    expect(await store.claimForAnalysis(afterBackoff)).toMatchObject({ name: RECORDING });
+  });
+
+  it("reads the clip once for a refusal where a retried failure reads it three times", async () => {
+    async function readsBeforeItStops(error: Error): Promise<number> {
+      const store = await completeRecording();
+      let reads = 0;
+      const loop = createAnalysisLoop({
+        store,
+        extractor: extractorReturning([]),
+        sampler: async () => {
+          reads += 1;
+          throw error;
+        },
+        ...SAMPLE,
+        frameWidth: SAMPLE.width,
+        pollMs: 1_000,
+        log: () => {},
+      });
+
+      for (let pass = 0; pass < MAX_ANALYSIS_ATTEMPTS + 2; pass += 1) {
+        if ((await loop.runOnce()) === null) break;
+        const recording = store.recordings.get(RECORDING)!;
+        recording.analysedAt = new Date(recording.analysedAt!.getTime() - RETRY_AFTER_MS - 1_000);
+      }
+      return reads;
+    }
+
+    expect(await readsBeforeItStops(new Error("openai is down"))).toBe(MAX_ANALYSIS_ATTEMPTS);
+    expect(await readsBeforeItStops(new UnanalysableRecording("frames ran past the ceiling"))).toBe(1);
   });
 });

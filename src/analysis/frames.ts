@@ -4,6 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 
+/** Thrown only where a short read cannot fake the result: selection is causal, so a truncated
+ * transfer yields fewer frames and never more. Everything else stays a retryable Error. */
+export class UnanalysableRecording extends Error {
+  readonly name = "UnanalysableRecording";
+}
+
 export interface Frame {
   offsetSeconds: number;
   jpeg: Buffer;
@@ -164,10 +170,12 @@ export const sampleFrames: FrameSampler = async (source, options) => {
     const timed = new Map(parseTimings(stdout).map((timing) => [timing.index, timing.offsetSeconds]));
     const files = (await readdir(dir)).sort();
     if (files.length > 0 && timed.size === 0) {
-      throw new Error(`ffmpeg wrote ${files.length} frames and printed no timings this build could read`);
+      throw new UnanalysableRecording(
+        `ffmpeg wrote ${files.length} frames and printed no timings this build could read`,
+      );
     }
     if (files.length >= DECODE_REQUEST) {
-      throw new Error(
+      throw new UnanalysableRecording(
         `ffmpeg was still finding frames at the ${DECODE_REQUEST}th, so the clip runs past what was sampled`,
       );
     }

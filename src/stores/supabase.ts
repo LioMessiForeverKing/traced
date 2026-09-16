@@ -260,5 +260,18 @@ export function createSupabaseStore(env: Env): RecordingStore {
         })
         .where(eq(recordings.name, recording));
     },
+
+    async refuseAnalysis(recording, reason) {
+      await db
+        .update(recordings)
+        .set({
+          analysisStatus: "refused",
+          analysisError: reason,
+          analysisAttempts: sql`${recordings.analysisAttempts} + 1`,
+          analysedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(recordings.name, recording));
+    },
   };
 }

@@ -1,6 +1,6 @@
 import type { AnalysisEvent, AnalysisStore } from "../store.js";
 import type { EventExtractor, ExtractedEvent } from "./extractor.js";
-import type { Frame, FrameSampler } from "./frames.js";
+import { UnanalysableRecording, type Frame, type FrameSampler } from "./frames.js";
 
 export interface AnalysisDeps {
   store: AnalysisStore;
@@ -77,8 +77,14 @@ export function createAnalysisLoop(deps: AnalysisDeps): AnalysisLoop {
       await deps.store.finishAnalysis(claim.name, events);
       log({ event: "analysed", recording: claim.name, frames: frames.length, events: events.length });
     } catch (error) {
-      await deps.store.failAnalysis(claim.name, reason(error));
-      log({ event: "analysis_failed", recording: claim.name, reason: reason(error) });
+      const refused = error instanceof UnanalysableRecording;
+      if (refused) await deps.store.refuseAnalysis(claim.name, reason(error));
+      else await deps.store.failAnalysis(claim.name, reason(error));
+      log({
+        event: refused ? "analysis_refused" : "analysis_failed",
+        recording: claim.name,
+        reason: reason(error),
+      });
     }
     return claim.name;
   }
