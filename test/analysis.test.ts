@@ -110,7 +110,8 @@ describe("sampling frames out of a clip", () => {
     await ffmpeg(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "anullsrc=d=1", "-c:a", "aac", junk]);
     const signed = `${junk}?token=FAKE-TOKEN-VALUE-FOR-TESTS&scope=download`;
 
-    await expect(sampleFrames(signed, SAMPLE)).rejects.toThrow(/ffmpeg exited/);
+    await expect(sampleFrames(signed, SAMPLE)).rejects.toThrow(/could not open the recording/);
+    await expect(sampleFrames(signed, SAMPLE)).rejects.toThrow(/<redacted>/);
     await expect(sampleFrames(signed, SAMPLE)).rejects.not.toThrow(/FAKE-TOKEN-VALUE-FOR-TESTS/);
   }, 60_000);
 

@@ -21,10 +21,14 @@ export type FrameSampler = (source: string, options: SampleOptions) => Promise<F
 // so the import is the string at runtime and the namespace to the compiler.
 const FFMPEG = ffmpegStatic as unknown as string | null;
 
-const DECODE_CEILING = 400;
+export const DECODE_CEILING = 400;
+const DECODE_REQUEST = DECODE_CEILING + 1;
+const GATE_DECIMALS = 3;
 const MIN_INTERVAL_SECONDS = 1;
-const FRAME_LINE = /^frame:\d+\s+pts:\S+\s+pts_time:(-?[\d.]+)/gm;
+const SCENE_SPACING_DIVISOR = 4;
+const FRAME_LINE = /^frame:(\d+)\s+pts:\S+\s+pts_time:(-?[\d.]+)/gm;
 const DURATION_LINE = /Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/;
+const OPENED_LINE = /^Input #0/m;
 const URL_WITH_QUERY = /((?:https?:\/\/|\/)\S*?)\?\S*/g;
 
 export function redactUrls(text: string): string {
@@ -57,38 +61,87 @@ async function ffmpeg(args: string[]): Promise<string> {
   return stdout;
 }
 
-export async function probeDuration(source: string): Promise<number | null> {
+async function probe(source: string): Promise<{ seconds: number | null; opened: boolean; stderr: string }> {
   const { stderr } = await run(["-hide_banner", "-i", source]);
+  const opened = OPENED_LINE.test(stderr);
   const match = DURATION_LINE.exec(stderr);
-  if (!match) return null;
+  if (!match) return { seconds: null, opened, stderr };
   const seconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
-  return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+  return { seconds: Number.isFinite(seconds) && seconds > 0 ? seconds : null, opened, stderr };
 }
 
-export function selectExpression(sceneThreshold: number, interval: number | null): string {
-  const terms = ["eq(n,0)", `gt(scene,${sceneThreshold})`];
-  if (interval !== null) terms.push(`gte(t-prev_selected_t,${interval.toFixed(3)})`);
-  return terms.join("+");
+export async function probeDuration(source: string): Promise<number | null> {
+  return (await probe(source)).seconds;
 }
 
-export function coverageInterval(duration: number | null, maxFrames: number): number | null {
-  if (duration === null || maxFrames < 1) return null;
-  return Math.max(MIN_INTERVAL_SECONDS, duration / maxFrames);
+function ceilingSpacing(duration: number): number {
+  return duration / (DECODE_CEILING - 1);
 }
 
-function parseOffsets(stdout: string): number[] {
-  return [...stdout.matchAll(FRAME_LINE)].map((match) => Math.max(0, Number(match[1])));
+export function coverageInterval(duration: number, maxFrames: number): number {
+  return Math.max(MIN_INTERVAL_SECONDS, duration / Math.max(1, maxFrames), ceilingSpacing(duration));
 }
 
-function thin<T>(items: T[], max: number): T[] {
-  if (items.length <= max || max < 1) return items;
-  if (max === 1) return [items[0]!];
-  const step = (items.length - 1) / (max - 1);
-  return Array.from({ length: max }, (_, index) => items[Math.round(index * step)]!);
+export function sceneSpacing(duration: number, interval: number): number {
+  return Math.max(interval / SCENE_SPACING_DIVISOR, ceilingSpacing(duration));
+}
+
+export function selectExpression(sceneThreshold: number, interval: number, spacing: number): string {
+  return [
+    "eq(n,0)",
+    `gt(scene,${sceneThreshold})*gte(t-prev_selected_t,${spacing.toFixed(GATE_DECIMALS)})`,
+    `gte(t-prev_selected_t,${interval.toFixed(GATE_DECIMALS)})`,
+  ].join("+");
+}
+
+interface Timing {
+  index: number;
+  offsetSeconds: number;
+}
+
+function parseTimings(stdout: string): Timing[] {
+  return [...stdout.matchAll(FRAME_LINE)].flatMap((match) => {
+    const offsetSeconds = Number(match[2]);
+    return Number.isFinite(offsetSeconds)
+      ? [{ index: Number(match[1]), offsetSeconds: Math.max(0, offsetSeconds) }]
+      : [];
+  });
+}
+
+export function spreadOverTime(frames: Frame[], maxFrames: number): Frame[] {
+  if (frames.length <= maxFrames || maxFrames < 1) return frames;
+  if (maxFrames === 1) return [frames[0]!];
+  const first = frames[0]!.offsetSeconds;
+  const span = frames.at(-1)!.offsetSeconds - first;
+  const taken = new Set<number>([0]);
+  const chosen: Frame[] = [frames[0]!];
+  for (let slot = 1; slot < maxFrames; slot += 1) {
+    const target = first + (span * slot) / (maxFrames - 1);
+    let best = -1;
+    let bestDistance = Infinity;
+    for (let index = 0; index < frames.length; index += 1) {
+      if (taken.has(index)) continue;
+      const distance = Math.abs(frames[index]!.offsetSeconds - target);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    }
+    taken.add(best);
+    chosen.push(frames[best]!);
+  }
+  return chosen.sort((left, right) => left.offsetSeconds - right.offsetSeconds);
 }
 
 export const sampleFrames: FrameSampler = async (source, options) => {
-  const interval = coverageInterval(await probeDuration(source), options.maxFrames);
+  const { seconds: duration, opened, stderr } = await probe(source);
+  const detail = redactUrls(stderr.trim()).slice(0, 500);
+  if (!opened) throw new Error(`ffmpeg could not open the recording: ${detail}`);
+  if (duration === null) {
+    throw new Error(`ffmpeg read no duration for the recording, so its coverage cannot be bounded: ${detail}`);
+  }
+  const interval = coverageInterval(duration, options.maxFrames);
+  const spacing = sceneSpacing(duration, interval);
   const dir = await mkdtemp(join(tmpdir(), "traced-frames-"));
   try {
     const stdout = await ffmpeg([
@@ -98,25 +151,35 @@ export const sampleFrames: FrameSampler = async (source, options) => {
       "-i",
       source,
       "-vf",
-      `select='${selectExpression(options.sceneThreshold, interval)}',metadata=print:file=-,scale=${options.width}:-2`,
+      `select='${selectExpression(options.sceneThreshold, interval, spacing)}',metadata=print:file=-,scale=${options.width}:-2`,
       "-fps_mode",
-      "vfr",
+      "passthrough",
       "-frames:v",
-      String(DECODE_CEILING),
+      String(DECODE_REQUEST),
       "-q:v",
       "4",
       join(dir, "frame-%04d.jpg"),
     ]);
 
-    const offsets = parseOffsets(stdout);
+    const timed = new Map(parseTimings(stdout).map((timing) => [timing.index, timing.offsetSeconds]));
     const files = (await readdir(dir)).sort();
+    if (files.length > 0 && timed.size === 0) {
+      throw new Error(`ffmpeg wrote ${files.length} frames and printed no timings this build could read`);
+    }
+    if (files.length >= DECODE_REQUEST) {
+      throw new Error(
+        `ffmpeg was still finding frames at the ${DECODE_REQUEST}th, so the clip runs past what was sampled`,
+      );
+    }
     const frames = await Promise.all(
-      files.map(async (file, index) => ({
-        offsetSeconds: offsets[index] ?? 0,
-        jpeg: await readFile(join(dir, file)),
-      })),
+      files.flatMap((file, index) => {
+        const offsetSeconds = timed.get(index);
+        return offsetSeconds === undefined
+          ? []
+          : [readFile(join(dir, file)).then((jpeg) => ({ offsetSeconds, jpeg }))];
+      }),
     );
-    return thin(frames, options.maxFrames);
+    return spreadOverTime(frames, options.maxFrames);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
