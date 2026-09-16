@@ -128,19 +128,19 @@ shift permanently. After three attempts it stays failed rather than retrying a g
 forever.
 
 A failure that cannot come out differently skips the retries entirely: the recording goes straight
-to `refused`, which the claim query never picks up. The line is drawn at the decode, not at the
-symptom — `frames.ts` throws `UnanalysableRecording` only once ffmpeg has read the clip through and
-exited cleanly and the result is still unusable, which today means frame timings this build cannot
-parse and a clip still yielding frames at the decode ceiling. Reaching either proves the bytes all
-arrived, so re-reading several hundred megabytes from Storage would reach the same verdict.
+to `refused`, which the claim query never picks up. Exactly two outcomes qualify, and what qualifies
+them is that a short read cannot produce either: a clip still yielding frames at the decode ceiling,
+where a truncated transfer would yield fewer and never more, and written frames carrying no timing
+this ffmpeg build prints, which is a property of the binary rather than of the bytes. Re-reading
+several hundred megabytes from Storage would reach the same verdict, so it does not.
 
-Everything earlier than that retries, and the reason is measured rather than assumed. A transfer
-that resets part-way and a genuinely broken file are indistinguishable at the probe: an MP4 cut
-short prints no `Input #0` at all, which is also what a Storage `503` prints. Worse, `Duration:
-N/A` is not a property of the recording — a *healthy* MPEG-TS served over HTTP reports it too,
-because the length is only knowable by seeking to the end. Refusing on either would have discarded
-intact footage on a network blip. Nothing moves a `refused` row back by itself; if the sampler's
-limits change, re-queue those rows by hand.
+Every other failure retries, and the bar is this narrow because the obvious wider ones were measured
+and rejected. A reset MP4 transfer prints no `Input #0` at all — exactly what a Storage `503`
+prints, so "could not open" cannot be terminal. `Duration: N/A` is not a property of the recording
+either: a *healthy* MPEG-TS served over HTTP reports it, because the length is only knowable by
+seeking to the end. And a reset MPEG-TS transfer exits `0`, so even a clean exit is not proof the
+bytes arrived. Each of those would have discarded intact footage on a network blip. Nothing moves a
+`refused` row back by itself; if the sampler's limits change, re-queue those rows by hand.
 
 Tune it with `ANALYSIS_MAX_FRAMES`, `ANALYSIS_SCENE_THRESHOLD`, `ANALYSIS_FRAME_WIDTH` and
 `ANALYSIS_POLL_MS`. Frame budget is the cost lever: frames dominate the bill. `OPENAI_MODEL`

@@ -5,9 +5,9 @@ import { join } from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 
 /**
- * Thrown only once ffmpeg has decoded the clip through and the result is still unusable, so the
- * bytes demonstrably arrived and a retry would reach the same verdict. Anything that fails before
- * that stays an ordinary Error: a reset transfer and a broken file are not distinguishable there.
+ * Thrown for the outcomes a short read cannot fake: more frames than the ceiling allows, where a
+ * truncated transfer yields fewer and never more, and written frames carrying no timing this build
+ * prints, which is a property of the binary. Everything earlier stays a retryable Error.
  */
 export class UnanalysableRecording extends Error {
   readonly name = "UnanalysableRecording";

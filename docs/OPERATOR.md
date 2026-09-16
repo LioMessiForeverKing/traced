@@ -365,18 +365,18 @@ filmed, the whole chain works and you are the first person to have proved it.
   `ANALYSIS_SCENE_THRESHOLD` of `0.4` is ffmpeg's conventional scene-cut figure, calibrated for
   footage with hard cuts, which this is not — so it contributes almost nothing on body worn video
   and the interval does the work. Lowering it is safe on any clip whose duration ffmpeg can read, and
-  every clip so far has been one. A clip whose container reports `Duration: N/A` is refused outright
-  — *ffmpeg read no duration* — because without a length there is nothing to spread a budget over.
+  every clip so far has been one. A clip whose container reports `Duration: N/A` is rejected — *ffmpeg
+  read no duration* — because without a length there is nothing to spread a budget over.
   A clip that reports a length shorter than the truth usually still analyses correctly — ffmpeg
   reads to the real end either way — and is refused only when the understated length packs the
   frames tightly enough to hit the decode ceiling first: *the clip runs past what was sampled*.
   Report either; both mean the container is lying about its own length, and the footage itself is
-  probably fine. Both keep their three retries: *no duration* in particular is not proof of a bad
-  clip, since a healthy stream fetched over HTTP can report `Duration: N/A` purely because its length
-  needs a seek to the end. Only *the clip runs past what was sampled* is terminal, because ffmpeg got
-  to the end of the clip to say it. A third message, *ffmpeg could not open the recording*, is not
-  about the container at all — that is a signed URL that has expired, a network problem, or a missing
-  object, and the clip is untouched; it retries too. A container claiming to be *longer* than its video is not refused: the whole
+  probably fine. *No duration* keeps its three retries and is not proof of a bad clip at all, since a
+  healthy stream fetched over HTTP reports `Duration: N/A` purely because its length needs a seek to
+  the end. Only *the clip runs past what was sampled* is terminal, and only because a transfer that
+  arrived short would have produced fewer frames rather than more. A third message, *ffmpeg could not
+  open the recording*, is not about the container at all — that is a signed URL that has expired, a
+  network problem, or a missing object, and the clip is untouched; it retries too. A container claiming to be *longer* than its video is not refused: the whole
   video is still covered, just with fewer frames than the budget allows, so a clip whose events look
   unusually thin is worth checking its declared length against its real one.
   Neither is the fix for a long clip that produced events only near the start. Report that symptom
@@ -393,7 +393,7 @@ filmed, the whole chain works and you are the first person to have proved it.
 | `401` when the controller tries to log in | `CD_USERNAME` / `CD_PASSWORD` no longer match the connection file | Regenerate with `npm run connection-file` and re-upload it. |
 | Upload fails around 50 MB | Supabase free plan's per-upload cap | Upgrade to Pro. No code change helps. |
 | `analysis_status` is `failed` | Almost never the clip. An OpenAI outage, a network blip, a timeout | Nothing to do. It retries three times, ten minutes apart; `analysis_attempts` counts them. **The footage is intact in Storage either way** — a failed analysis never means lost evidence. |
-| `analysis_status` is `refused` | ffmpeg read the whole clip and the result was still unusable — unreadable frame timings, or frames still coming at the decode ceiling | Retrying re-downloads the clip to reach the same verdict, so it does not retry. **The footage is still intact in Storage.** Read `analysis_error` for which of the two it was, and report it. |
+| `analysis_status` is `refused` | One of two results a re-read cannot change: frames still arriving at the decode ceiling, or frames carrying no timing this ffmpeg build prints | It does not retry, because retrying re-downloads the clip to reach the same verdict. **The footage is still intact in Storage.** Read `analysis_error` for which of the two it was, and report it. |
 | `moov atom not found` | Not a real video — usually `fake-w800` with no clip argument | Pass a real MP4. |
 | Dashboard is empty but rows exist in Supabase | The signed-in account is a member of nothing, or of a different project | `npm run grant-access -- <email>`. It defaults to `PROJECT_ID`, which is the project this intake is actually stamping on its rows. |
 | A `viewer` cannot play a clip | Working as designed | Viewers read the record and never reach the footage. Grant `member` if that person should see video. |

@@ -207,6 +207,29 @@ describe("a recording ffmpeg could not reach", () => {
   }, 60_000);
 });
 
+describe("a transfer that dies part-way through", () => {
+  it("is retried rather than refused, whatever exit code ffmpeg gives it", async () => {
+    const bytes = await readFile(clip);
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { "Content-Type": "video/mp4", "Content-Length": String(bytes.length) });
+      response.write(bytes.subarray(0, Math.floor(bytes.byteLength * 0.4)));
+      setTimeout(() => response.socket?.destroy(), 80);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      const cut = `http://127.0.0.1:${port}/recordings/clip.mp4`;
+      const failure = await sampleFrames(cut, SAMPLE).catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(UnanalysableRecording);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }, 120_000);
+});
+
 describe("a recording whose own frames are far apart", () => {
   it("is not mistaken for one that stopped early", async () => {
     const lapse = join(dir, "lapse.mp4");

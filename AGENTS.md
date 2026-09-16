@@ -62,10 +62,10 @@ contract makes that file stale and is fixed in the same PR.
 samples on a duration-derived interval *plus* scene changes held a minimum distance apart, so a long
 continuous recording is covered end to end rather than only at its start and no burst of scene
 changes can crowd the interval out or exhaust the decode ceiling before the clip ends; it shells out
-to `ffmpeg-static` and throws `UnanalysableRecording` only for a clip it decoded through whose result
-is still unusable, `extractor.ts` is the only place that talks to OpenAI, `loop.ts` claims work and
-owns the retry story — it refuses those on the first attempt and retries everything else, because
-until the decode finishes a reset transfer and a broken file look identical. Nothing on the request path may call into it.
+to `ffmpeg-static` and throws `UnanalysableRecording` for the two outcomes a truncated transfer
+cannot produce — more frames than the decode ceiling, and frames with no timing this build prints;
+`extractor.ts` is the only place that talks to OpenAI, `loop.ts` claims work and owns the retry
+story, refusing those on the first attempt and retrying everything else. Nothing on the request path may call into it.
 
 **Access** — `src/access.ts` is the only place that mints an account or a membership. It uses the
 admin API and so needs the service-role key; nothing on the request path may call it.
