@@ -61,9 +61,11 @@ roster itself is readable only by an admin.
 no change to gain it. An uploaded recording is named by `src/uploads.ts` and always begins
 `upload_`, which `parseRecordingName` can never return a match for; that disjointness is the whole
 reason a browser insert cannot land on a camera's row, and the policy enforces the prefix rather
-than trusting it. The three inserts are narrowed the same way — `source = 'upload'` only, an object
-row only where `storage_path` is exactly `<recording>/<name>` and the recording is an upload, and a
-bucket key only under an `upload_` folder. That middle check is an `exists` inside the policy rather
+than trusting it. The three inserts are narrowed the same way — `source = 'upload'` only, a row born
+unanalysed because `analysis_status`, `analysis_attempts`, `analysis_error` and `analysed_at` belong
+to the analyser and no `UPDATE` policy exists to correct a forged one, an object row only where
+`storage_path` is exactly `<recording>/<name>` and the recording is an upload, and a bucket key only
+under an `upload_` folder. That middle check is an `exists` inside the policy rather
 than a sixth `SECURITY DEFINER` function, because a function answering *where a row came from* is
 callable over PostgREST by anyone signed in and would answer about rows they cannot read — the five
 that exist all answer about the caller instead, which is why they are safe to expose.

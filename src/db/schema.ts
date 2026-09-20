@@ -181,7 +181,9 @@ export const recordings = pgTable(
     selectPolicy("recordings_select_access", accessTo(table.projectId)),
     insertPolicy(
       "recordings_insert_upload_admin",
-      sql`${platformAdmin} and ${table.source} = 'upload' and starts_with(${table.name}, ${uploadPrefix})`,
+      sql`${platformAdmin} and ${table.source} = 'upload' and starts_with(${table.name}, ${uploadPrefix})
+        and ${table.analysisStatus} = 'pending' and ${table.analysisAttempts} = 0
+        and ${table.analysedAt} is null and ${table.analysisError} is null`,
     ),
   ],
 ).enableRLS();

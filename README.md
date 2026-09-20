@@ -251,11 +251,14 @@ recording of their own, the object row for it, and the bytes at `<recording>/cli
 analyser never learned about any of this: it claims a complete recording out of Postgres and has
 never cared how the row got there.
 
-Three things keep that hole the size it is. The insert is admin-only, so a member and a viewer are
+Four things keep that hole the size it is. The insert is admin-only, so a member and a viewer are
 refused all three. The recording must be `source = 'upload'` and its name must begin `upload_` — a
 shape `parseRecordingName` can never match, so the two namespaces cannot collide and a browser
-insert can never land on a camera's recording. And the object row must point at
-`<recording_name>/<name>` exactly, so it cannot claim footage that belongs to something else.
+insert can never land on a camera's recording. The object row must point at `<recording_name>/<name>`
+exactly, so it cannot claim footage that belongs to something else. And the recording must be born
+unanalysed — `pending`, no attempts, no error, no `analysed_at` — because those columns belong to
+the analyser, and a row inserted as `done` would never be claimed and, with no `UPDATE` policy to
+undo it, could never be put right from a browser again.
 Nothing may be updated or deleted afterwards, by anyone, including the admin who uploaded it. The
 three policies are append-only rather than write-once: an admin can still add a second object row
 to their own upload under a name not already taken, which a member would then see as a second clip.

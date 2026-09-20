@@ -200,6 +200,16 @@ describe("an admin uploading a clip", () => {
     const asCameraName = await boss.from("recordings").insert(recordingRow({ name: unusedCameraName }));
     expect(asCameraName.error).toBeTruthy();
 
+    const bornDone = await boss
+      .from("recordings")
+      .insert(recordingRow({ name: uploadRecordingName(STARTED_AT), analysis_status: "done" }));
+    expect(bornDone.error).toBeTruthy();
+
+    const bornSpent = await boss
+      .from("recordings")
+      .insert(recordingRow({ name: uploadRecordingName(STARTED_AT), analysis_attempts: 3 }));
+    expect(bornSpent.error).toBeTruthy();
+
     const { error } = await boss.from("recordings").insert(recordingRow());
     expect(error).toBeNull();
   });
