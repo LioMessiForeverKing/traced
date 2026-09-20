@@ -129,7 +129,7 @@ Put that id in `PROJECT_ID`.
 ### 4. Apply the migrations
 
 The SQL in `drizzle/` runs in numeric order against your project's database. Apply `0000` through
-`0006`. Afterwards every table has row level security on with exactly one `SELECT` policy, and the
+`0007`. Afterwards every table has row level security on with exactly one `SELECT` policy, and the
 `recordings` bucket has a matching one.
 
 ### 5. Start it
@@ -181,7 +181,16 @@ For the insurance side, who should see the record of the work but never the foot
 npm run grant-access -- insurance@example.com --role viewer
 ```
 
-The difference between the two roles is in [the README](../README.md#who-can-read-what).
+For yourself, if you need to see every site rather than one:
+
+```bash
+npm run grant-access -- you@example.com --admin
+```
+
+That is a platform admin: no project membership, and every project readable. It still writes
+nothing — an admin reads the record like everyone else does, and only this intake writes to it.
+
+The difference between the three is in [the README](../README.md#who-can-read-what).
 
 ---
 

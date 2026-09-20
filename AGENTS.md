@@ -47,6 +47,14 @@ table gets `memberOf`, the member-only predicate, and only a deliberate decision
 `accessTo`. That direction is the safety property: a table nobody thought about shows an insurer
 too little, never too much.
 
+A platform admin is a row in `platform_admins`, keyed on `auth.users` and belonging to no project,
+because an admin is above projects rather than a member of each. `public.is_admin()` is `or`-ed
+into all four access functions, so every policy inherits an admin without a single policy being
+rewritten — **which means `is_project_member` and `is_recording_member` now return true for someone
+holding no `project_members` row at all.** Read those four as *may act as a member here*, never as
+a fact about membership; `project_members` is the only thing that answers that question. The
+admin roster itself is readable only by an admin.
+
 **The Axis protocol** — `src/axis/` is a module, not the spine. `src/axis/app.ts` is the wire and
 the spec is `github.com/AxisCommunications/body-worn-integration-api`; change the wire only with the
 spec open. `AXIS_ENABLED=false` starts the process without it, and without the four `CD_` values —
@@ -71,8 +79,10 @@ cannot produce — more frames than the decode ceiling, and frames with no timin
 `extractor.ts` is the only place that talks to OpenAI, `loop.ts` claims work and owns the retry
 story, refusing those on the first attempt and retrying everything else. Nothing on the request path may call into it.
 
-**Access** — `src/access.ts` is the only place that mints an account or a membership. It uses the
-admin API and so needs the service-role key; nothing on the request path may call it.
+**Access** — `src/access.ts` is the only place that mints an account, a membership or a platform
+admin. It uses the admin API and so needs the service-role key; nothing on the request path may
+call it. `scripts/grant-access-args.ts` holds the CLI's argument rules and is unit-tested, so a
+contradictory invocation is refused rather than half-parsed.
 
 **Comments** — at most 5% of non-blank lines per file. No inline comments. No block over 3 lines.
 `npm run audit:comments` must pass before a PR opens. It audits `src`, `scripts` and `test`; the

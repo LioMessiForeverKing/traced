@@ -50,6 +50,13 @@
       "when": 1789152392472,
       "tag": "0006_viewer_role",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789238792472,
+      "tag": "0007_platform_admin",
+      "breakpoints": true
     }
   ]
 }

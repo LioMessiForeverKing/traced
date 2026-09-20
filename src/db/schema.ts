@@ -43,6 +43,8 @@ function accessToRecording(recording: AnyPgColumn) {
   return sql`${signedIn} and public.has_recording_access(${recording})`;
 }
 
+const platformAdmin = sql`${signedIn} and public.is_admin()`;
+
 function selectPolicy(name: string, predicate: SQL) {
   return pgPolicy(name, { as: "permissive", for: "select", to: authenticatedRole, using: predicate });
 }
@@ -60,6 +62,17 @@ export const projects = pgTable(
     ...timestamps,
   },
   (table) => [selectPolicy("projects_select_access", accessTo(table.id))],
+);
+
+export const platformAdmins = pgTable(
+  "platform_admins",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    ...timestamps,
+  },
+  () => [selectPolicy("platform_admins_select_admin", platformAdmin)],
 );
 
 export const projectRoles = ["member", "viewer"] as const;
