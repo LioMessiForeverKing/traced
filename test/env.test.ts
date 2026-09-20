@@ -26,7 +26,7 @@ describe("loadEnv", () => {
     expect(env.analysis.enabled).toBe(false);
   });
 
-  it("treats a blank Axis value as absent, not as a broken one", () => {
+  it("starts with the wire off even when blank Axis values are left in place", () => {
     const env = load({
       AXIS_ENABLED: "false",
       ANALYSIS_ENABLED: "false",
@@ -75,7 +75,14 @@ describe("loadEnv", () => {
     expect(() => load({ ...rest, ANALYSIS_ENABLED: "false" })).toThrow(/CD_TOKEN_SECRET/);
   });
 
-  it("refuses a blank Axis value while the wire is switched on", () => {
-    expect(() => load({ ...AXIS, CD_PASSWORD: "", ANALYSIS_ENABLED: "false" })).toThrow(/CD_PASSWORD/);
+  it("calls a blank Axis value missing rather than malformed while the wire is on", () => {
+    expect(() => load({ ...AXIS, CD_PASSWORD: "", ANALYSIS_ENABLED: "false" })).toThrow(
+      /CD_PASSWORD is required/,
+    );
+  });
+
+  it("keeps the documented default when a tuning value is set but blank", () => {
+    const env = load({ AXIS_ENABLED: "false", ANALYSIS_ENABLED: "false", ANALYSIS_SCENE_THRESHOLD: "" });
+    expect(env.ANALYSIS_SCENE_THRESHOLD).toBe(0.4);
   });
 });

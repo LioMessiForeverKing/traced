@@ -9,7 +9,9 @@ async function sources(path: string): Promise<string[]> {
   if (path.endsWith(".ts")) return [path];
   const entries = await readdir(path, { withFileTypes: true });
   const nested = await Promise.all(
-    entries.map((entry) => sources(join(path, entry.name))),
+    entries
+      .filter((entry) => entry.isDirectory() || entry.name.endsWith(".ts"))
+      .map((entry) => sources(join(path, entry.name))),
   );
   return nested.flat();
 }

@@ -3,17 +3,14 @@ import { z } from "zod";
 const blankAsAbsent = (value: unknown) =>
   typeof value === "string" && value.trim() === "" ? undefined : value;
 
-const booleanish = z.preprocess(
-  blankAsAbsent,
-  z
-    .enum(["true", "false"])
-    .default("true")
-    .transform((value) => value === "true"),
-);
-
-function optionalText<T extends z.ZodType>(inner: T) {
-  return z.preprocess(blankAsAbsent, inner.optional());
+function setting<T extends z.ZodType>(inner: T) {
+  return z.preprocess(blankAsAbsent, inner);
 }
+
+const booleanish = z
+  .enum(["true", "false"])
+  .default("true")
+  .transform((value) => value === "true");
 
 const AXIS_FIELDS = {
   CD_PUBLIC_URL: z.url(),
@@ -24,24 +21,24 @@ const AXIS_FIELDS = {
 
 const schema = z
   .object({
-    PORT: z.coerce.number().int().positive().default(8080),
-    AXIS_ENABLED: booleanish,
-    CD_PUBLIC_URL: optionalText(z.string()),
-    CD_USERNAME: optionalText(z.string()),
-    CD_PASSWORD: optionalText(z.string()),
-    CD_TOKEN_SECRET: optionalText(z.string()),
+    PORT: setting(z.coerce.number().int().positive().default(8080)),
+    AXIS_ENABLED: setting(booleanish),
+    CD_PUBLIC_URL: setting(z.string().optional()),
+    CD_USERNAME: setting(z.string().optional()),
+    CD_PASSWORD: setting(z.string().optional()),
+    CD_TOKEN_SECRET: setting(z.string().optional()),
     PROJECT_ID: z.uuid(),
     SUPABASE_URL: z.url(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
     DATABASE_URL: z.string().min(1),
-    RECORDINGS_BUCKET: z.string().min(1).default("recordings"),
-    ANALYSIS_ENABLED: booleanish,
-    ANALYSIS_POLL_MS: z.coerce.number().int().positive().default(15_000),
-    ANALYSIS_MAX_FRAMES: z.coerce.number().int().positive().default(24),
-    ANALYSIS_SCENE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.4),
-    ANALYSIS_FRAME_WIDTH: z.coerce.number().int().positive().default(768),
-    OPENAI_API_KEY: optionalText(z.string().min(1)),
-    OPENAI_MODEL: z.string().min(1).default("gpt-5.5"),
+    RECORDINGS_BUCKET: setting(z.string().min(1).default("recordings")),
+    ANALYSIS_ENABLED: setting(booleanish),
+    ANALYSIS_POLL_MS: setting(z.coerce.number().int().positive().default(15_000)),
+    ANALYSIS_MAX_FRAMES: setting(z.coerce.number().int().positive().default(24)),
+    ANALYSIS_SCENE_THRESHOLD: setting(z.coerce.number().min(0).max(1).default(0.4)),
+    ANALYSIS_FRAME_WIDTH: setting(z.coerce.number().int().positive().default(768)),
+    OPENAI_API_KEY: setting(z.string().optional()),
+    OPENAI_MODEL: setting(z.string().min(1).default("gpt-5.5")),
   })
   .superRefine((env, ctx) => {
     if (env.AXIS_ENABLED) {

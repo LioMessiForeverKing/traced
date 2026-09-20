@@ -215,6 +215,8 @@ curl -i http://<host>:8080/auth/v1.0
 
 A `401` is the correct and healthy answer — it means you reached the intake and it asked who you
 are. A timeout or "connection refused" means the W800 will not get through either. Fix that now.
+A `404` means you reached the intake but the wire is not mounted — `AXIS_ENABLED` is `false`. See
+[When it goes wrong](#when-it-goes-wrong).
 
 ### About HTTP
 
