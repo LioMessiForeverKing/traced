@@ -173,26 +173,38 @@ npm run grant-access -- insurance@example.com --role viewer
 described below. Re-running with a different role changes it and says so: `previousRole` in the
 output names the role it replaced, so nobody is quietly downgraded.
 
+```bash
+npm run grant-access -- ops@traced.example --admin
+```
+
+`--admin` grants the platform side: a row in `platform_admins`, because an admin reads every
+project already and needs no membership to do it. It takes no project id and no `--role`, and
+refuses both rather than guessing which one you meant. It never touches `project_members` — an
+account that was already a member of a site keeps that row, so promoting somebody adds access and
+does not quietly take away what they had.
+
 It does not create projects. A new site is one `insert into projects (name) values ('...')`, and
 its id is what you pass as the second argument.
 
 ## Who can read what
 
-Every table has RLS on and exactly one policy: `SELECT`, `TO authenticated`, allowed only to
-someone with a `project_members` row for the project. There are no `INSERT`, `UPDATE` or `DELETE`
-policies anywhere, because the browser never writes — the intake holds the service-role key and
-writes everything, and the service role bypasses RLS. A dashboard bug therefore cannot alter
-evidence.
+Every table has RLS on and exactly one policy: `SELECT`, `TO authenticated`, allowed to someone
+with a `project_members` row for the project or to a platform admin. There are no `INSERT`,
+`UPDATE` or `DELETE` policies anywhere, for anyone, admin included — the browser never writes. The
+intake holds the service-role key and writes everything, and the service role bypasses RLS. A
+dashboard bug therefore cannot alter evidence.
 
 That row carries a `role`, and there are two of them. A `member` is the contractor and sees the
 project whole. A `viewer` is the insurance side and sees the record of the work, not the site
-around it. No row at all still means no rows at all.
+around it. No row at all still means no rows at all — unless the account is a platform admin, which
+is the third kind of login and the only one that is not a `project_members` row.
 
-| | `member` | `viewer` |
-|---|---|---|
-| `projects`, `recordings`, `recording_events` | yes | yes |
-| `camera_users`, `devices`, `bws_systems`, `project_members` | yes | no |
-| `recording_objects`, and the clip bytes | yes | no |
+| | `member` | `viewer` | admin |
+|---|---|---|---|
+| `projects`, `recordings`, `recording_events` | own project | own project | every project |
+| `camera_users`, `devices`, `bws_systems`, `project_members` | own project | no | every project |
+| `recording_objects`, and the clip bytes | own project | no | every project |
+| `platform_admins` | no | no | yes |
 
 An insurer is buying the record, not the footage. Body worn video carries the faces and voices of
 the workers wearing it, and an underwriter has no reason to watch a shift — so a viewer never
@@ -220,6 +232,18 @@ recurse. `is_project_member(uuid)` and `is_recording_member(text)` are true only
 `role = 'member'`; `has_project_access(uuid)` and `has_recording_access(text)` are true for either
 role.
 
+All four also begin `public.is_admin() or ...`, which is the whole of how an admin exists. There is
+no admin policy anywhere: teaching those four functions teaches all nine policies at once, including
+the `storage.objects` one, so nothing had to be rewritten and nothing can be left behind. The price
+is that two of the four now have names that overstate what they check — `is_project_member` is true
+for an admin who is a member of nothing. They answer *may this account act as a member here*, and
+`project_members` remains the only answer to *is this account a member*. A platform admin is above
+projects: the role is a `platform_admins` row and never a `project_members` one, so granting it puts
+nobody on a roster — though an account promoted from member keeps the row it already had, because
+`--admin` adds access and never removes it. A roster therefore answers *who is a member here*, and
+never *who can read this*. `platform_admins` is readable only by an admin, so a contractor cannot
+enumerate who is watching.
+
 The split runs that way round deliberately. The member-only predicate is the one a table keeps by
 default, so a table nobody has thought about shows a viewer nothing until someone widens it on
 purpose — the failure is an insurer seeing too little, never too much. `storage.objects` needed no
@@ -231,23 +255,27 @@ npm run test:rls
 
 That suite runs against the real project, in two halves.
 
-`test/rls.live.test.ts` covers the tables: two throwaway projects, four real auth users, a
+`test/rls.live.test.ts` covers the tables: two throwaway projects, five real auth users, a
 recording seeded in each, then every table read as each user with `SET ROLE authenticated` and a
 `request.jwt.claims` subject. A member sees their own site and nothing of the other, a viewer of
 the same site sees the record and none of the site around it, a signed-in non-member sees zero
-rows, an anonymous visitor sees zero rows, a member's `INSERT` is refused.
+rows, an anonymous visitor sees zero rows, a member's `INSERT` is refused. A platform admin sees
+both sites whole while holding no membership row, sees the admin roster that everyone else is
+refused, and has their `INSERT` refused too — an admin reads everything and still writes nothing.
 
 `test/storage.live.test.ts` covers the bytes, and takes the path a browser actually takes: it signs
 in with `SUPABASE_PUBLISHABLE_KEY` to get a real session, mints a signed URL, and streams it. A
 member gets their clip's bytes; the same member is refused a URL for another project's clip; a
 viewer of that very project is refused; a non-member and an anonymous visitor are refused; listing
-shows only reachable folders.
+shows only reachable folders. An admin streams a clip from a project they never joined, and lists
+every folder.
 
 `test/access.live.test.ts` covers `grant-access` end to end: it grants a fresh account, signs in
 with the password it handed back, and reads the project's recordings and events through the
 publishable key. It also asserts a second run changes nothing, that an unknown project is refused,
 that a `viewer` grant reads the events but not `camera_users`, and that changing a role reports the
-role it replaced.
+role it replaced. It also grants an admin, signs in as one, and reads a second project that account
+was never added to.
 
 All three delete their fixtures and auth users afterwards. None is in CI, because they need live
 credentials — run them before deploying a policy or access change.

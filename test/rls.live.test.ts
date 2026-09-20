@@ -31,7 +31,7 @@ interface Visibility {
 }
 
 const site = { a: "", b: "" };
-const account = { alice: "", bob: "", viewer: "", outsider: "" };
+const account = { alice: "", bob: "", viewer: "", outsider: "", boss: "" };
 
 async function createAccount(label: string): Promise<string> {
   const { data, error } = await admin.auth.admin.createUser({
@@ -134,6 +134,17 @@ const oneSite: Visibility = {
 
 const sharedSite: Visibility = { ...oneSite, members: 2 };
 
+const everySite: Visibility = {
+  projects: 2,
+  members: 3,
+  systems: 2,
+  cameraUsers: 2,
+  devices: 2,
+  recordings: 2,
+  objects: 2,
+  events: 2,
+};
+
 const theRecordOnly: Visibility = {
   projects: 1,
   members: 0,
@@ -150,6 +161,7 @@ beforeAll(async () => {
   account.bob = await createAccount("bob");
   account.viewer = await createAccount("viewer");
   account.outsider = await createAccount("outsider");
+  account.boss = await createAccount("boss");
   site.a = await seedSite("A");
   site.b = await seedSite("B");
   await db`
@@ -159,9 +171,11 @@ beforeAll(async () => {
       (${site.b}, ${account.bob}, 'member'),
       (${site.a}, ${account.viewer}, 'viewer')
   `;
+  await db`insert into platform_admins (user_id) values (${account.boss})`;
 });
 
 afterAll(async () => {
+  await db`delete from platform_admins where user_id = ${account.boss}`;
   await db`delete from recordings where name like ${prefix}`;
   await db`delete from bws_systems where id like ${prefix}`;
   await db`delete from camera_users where id like ${prefix}`;
@@ -209,6 +223,62 @@ describe("row level security", () => {
       return [await tx`select id from projects where name like ${prefix}`];
     });
     expect(names.map((row) => row.id)).toEqual([site.a]);
+  });
+
+  it("shows a platform admin every project, without a membership row anywhere", async () => {
+    expect(await visibleTo(account.boss)).toEqual(everySite);
+
+    const [memberships] = await db`
+      select count(*) as count from project_members where user_id = ${account.boss}
+    `;
+    expect(Number(memberships.count)).toBe(0);
+  });
+
+  it("shows an admin the admin roster, and shows a member none of it", async () => {
+    const seen = async (userId: string) =>
+      db.begin(async (tx) => {
+        const claims = JSON.stringify({ sub: userId, role: "authenticated" });
+        await tx`select set_config('request.jwt.claims', ${claims}, true)`;
+        await tx`select set_config('role', 'authenticated', true)`;
+        const [row] = await tx`
+          select count(*) as count from platform_admins where user_id = ${account.boss}
+        `;
+        return Number(row.count);
+      });
+
+    expect(await seen(account.boss)).toBe(1);
+    expect(await seen(account.alice)).toBe(0);
+    expect(await seen(account.viewer)).toBe(0);
+  });
+
+  it("refuses a platform admin's write, because only the service role writes", async () => {
+    await expect(
+      db.begin(async (tx) => {
+        const claims = JSON.stringify({ sub: account.boss, role: "authenticated" });
+        await tx`select set_config('request.jwt.claims', ${claims}, true)`;
+        await tx`select set_config('role', 'authenticated', true)`;
+        await tx`
+          insert into recording_events (recording_name, offset_seconds, description, confidence, frame_offsets)
+          values (${`${stamp}-rec-a`}, 3.0, 'invented by the admin browser', 1.0, array[3.0])
+        `;
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("refuses an ordinary member the one insert that would make them an admin", async () => {
+    await expect(
+      db.begin(async (tx) => {
+        const claims = JSON.stringify({ sub: account.alice, role: "authenticated" });
+        await tx`select set_config('request.jwt.claims', ${claims}, true)`;
+        await tx`select set_config('role', 'authenticated', true)`;
+        await tx`insert into platform_admins (user_id) values (${account.alice})`;
+      }),
+    ).rejects.toThrow(/row-level security|permission denied/);
+
+    const [rows] = await db`
+      select count(*) as count from platform_admins where user_id = ${account.alice}
+    `;
+    expect(Number(rows.count)).toBe(0);
   });
 
   it("shows a signed-in non-member nothing", async () => {

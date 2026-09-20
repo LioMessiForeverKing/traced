@@ -70,15 +70,18 @@ beforeAll(async () => {
   await createAccount("alice");
   await createAccount("viewer");
   await createAccount("outsider");
+  await createAccount("boss");
   await seedSite("a");
   await seedSite("b");
   await db`
     insert into project_members (project_id, user_id, role)
     values (${site.a}, ${account.alice.id}, 'member'), (${site.a}, ${account.viewer.id}, 'viewer')
   `;
+  await db`insert into platform_admins (user_id) values (${account.boss.id})`;
 });
 
 afterAll(async () => {
+  await db`delete from platform_admins where user_id = ${account.boss.id}`;
   await admin.storage.from(bucket).remove([clipPath.a, clipPath.b].filter(Boolean));
   await db`delete from recordings where name like ${prefix}`;
   await db`delete from project_members where project_id in (${site.a}, ${site.b})`;
@@ -111,6 +114,25 @@ describe("recordings bucket", () => {
     const { data, error } = await viewer.storage.from(bucket).createSignedUrl(clipPath.a, 60);
     expect(data).toBeNull();
     expect(error).toBeTruthy();
+  });
+
+  it("lets a platform admin stream a clip from a project they are not a member of", async () => {
+    const boss = await signIn("boss");
+    const { data, error } = await boss.storage.from(bucket).createSignedUrl(clipPath.b, 60);
+    expect(error).toBeNull();
+    expect(data?.signedUrl).toBeTruthy();
+
+    const response = await fetch(data!.signedUrl);
+    expect(response.status).toBe(200);
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(clipBytes);
+  });
+
+  it("lists every recording's folder for a platform admin", async () => {
+    const boss = await signIn("boss");
+    const { data } = await boss.storage.from(bucket).list("", { limit: 100, search: stamp });
+    const names = (data ?? []).map((entry) => entry.name);
+    expect(names).toContain(`${stamp}-rec-a`);
+    expect(names).toContain(`${stamp}-rec-b`);
   });
 
   it("refuses a signed-in non-member", async () => {
