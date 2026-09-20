@@ -104,7 +104,7 @@ Then edit `.env.local`. The values that need thought:
 
 | Variable | What to put in it |
 |---|---|
-| `AXIS_ENABLED` | `true`. It defaults to `true`, and it has to be true for any of this — it is what mounts the wire the W800 speaks. `false` runs the intake for browser-uploaded clips only, with none of the `CD_` values set. |
+| `AXIS_ENABLED` | `true`, which is also the default. It has to be true for anything in this runbook: it is what mounts the wire the W800 speaks. `false` mounts no wire at all — the process runs the analyser alone and answers `404` on every path — and is only useful once clips reach the database some other way, which nothing in this repo does yet. |
 | `CD_PUBLIC_URL` | The address **the W800 will use**, not `localhost`. Settled in [Part 2](#part-2--put-it-somewhere-the-w800-can-reach). |
 | `CD_USERNAME` / `CD_PASSWORD` | Invent them. These are the credentials the controller uses to log in to you. The password must be at least 8 characters and goes into the connection file in clear text, so treat that file as a secret. |
 | `CD_TOKEN_SECRET` | A random string of at least 16 characters. It signs the 15-minute session tokens the controller gets. Never reuse one across sites. |
@@ -392,7 +392,8 @@ filmed, the whole chain works and you are the first person to have proved it.
 
 | What you see | What it usually is | What to do |
 |---|---|---|
-| Controller authenticates, then the upload hangs or times out | `CD_PUBLIC_URL` is wrong or unreachable — the single most common failure | `curl -i http://<host>:8080/auth/v1.0` from another machine on the controller's network. A `401` is correct; anything else is the problem. |
+| Controller authenticates, then the upload hangs or times out | `CD_PUBLIC_URL` is wrong or unreachable — the single most common failure | `curl -i http://<host>:8080/auth/v1.0` from another machine on the controller's network. A `401` is correct. |
+| `404` on `/auth/v1.0`, from any machine | The wire is not mounted: `AXIS_ENABLED` is `false`. The server is listening and healthy in every other respect, which is why this reads like a network fault and is not one | Check the startup log — it prints `"authUrl":false` when the wire is off. Set `AXIS_ENABLED=true`, fill the four `CD_` values, restart. |
 | `401` when the controller tries to log in | `CD_USERNAME` / `CD_PASSWORD` no longer match the connection file | Regenerate with `npm run connection-file` and re-upload it. |
 | Upload fails around 50 MB | Supabase free plan's per-upload cap | Upgrade to Pro. No code change helps. |
 | `analysis_status` is `failed` | Almost never the clip. An OpenAI outage, a network blip, a timeout | Nothing to do. It retries three times, ten minutes apart; `analysis_attempts` counts them. **The footage is intact in Storage either way** — a failed analysis never means lost evidence. |

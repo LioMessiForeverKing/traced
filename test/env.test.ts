@@ -43,6 +43,28 @@ describe("loadEnv", () => {
     expect(env.analysis.enabled).toBe(false);
   });
 
+  it("falls back to the default when a switch is set but blank", () => {
+    const env = load({ AXIS_ENABLED: "", ANALYSIS_ENABLED: "false", ...AXIS });
+    expect(env.axis.enabled).toBe(true);
+  });
+
+  it("ignores a leftover Axis value that is wrong while the wire is off", () => {
+    const env = load({
+      AXIS_ENABLED: "false",
+      ANALYSIS_ENABLED: "false",
+      CD_PUBLIC_URL: "192.168.1.10:8080",
+      CD_PASSWORD: "short",
+    });
+    expect(env.axis.enabled).toBe(false);
+  });
+
+  it("still refuses a malformed Axis value while the wire is on", () => {
+    expect(() => load({ ...AXIS, CD_PUBLIC_URL: "192.168.1.10:8080", ANALYSIS_ENABLED: "false" })).toThrow(
+      /CD_PUBLIC_URL/,
+    );
+    expect(() => load({ ...AXIS, CD_PASSWORD: "short", ANALYSIS_ENABLED: "false" })).toThrow(/CD_PASSWORD/);
+  });
+
   it("serves the wire when the Axis values are all there", () => {
     const env = load({ ...AXIS, ANALYSIS_ENABLED: "false" });
     expect(env.axis).toMatchObject({ enabled: true, publicUrl: AXIS.CD_PUBLIC_URL, username: AXIS.CD_USERNAME });

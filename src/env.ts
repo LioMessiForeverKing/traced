@@ -1,27 +1,35 @@
 import { z } from "zod";
 
-const booleanish = z
-  .enum(["true", "false"])
-  .default("true")
-  .transform((value) => value === "true");
+const blankAsAbsent = (value: unknown) =>
+  typeof value === "string" && value.trim() === "" ? undefined : value;
+
+const booleanish = z.preprocess(
+  blankAsAbsent,
+  z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+);
 
 function optionalText<T extends z.ZodType>(inner: T) {
-  return z.preprocess(
-    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
-    inner.optional(),
-  );
+  return z.preprocess(blankAsAbsent, inner.optional());
 }
 
-const AXIS_VARS = ["CD_PUBLIC_URL", "CD_USERNAME", "CD_PASSWORD", "CD_TOKEN_SECRET"] as const;
+const AXIS_FIELDS = {
+  CD_PUBLIC_URL: z.url(),
+  CD_USERNAME: z.string().min(1),
+  CD_PASSWORD: z.string().min(8),
+  CD_TOKEN_SECRET: z.string().min(16),
+} as const;
 
 const schema = z
   .object({
     PORT: z.coerce.number().int().positive().default(8080),
     AXIS_ENABLED: booleanish,
-    CD_PUBLIC_URL: optionalText(z.url()),
-    CD_USERNAME: optionalText(z.string().min(1)),
-    CD_PASSWORD: optionalText(z.string().min(8)),
-    CD_TOKEN_SECRET: optionalText(z.string().min(16)),
+    CD_PUBLIC_URL: optionalText(z.string()),
+    CD_USERNAME: optionalText(z.string()),
+    CD_PASSWORD: optionalText(z.string()),
+    CD_TOKEN_SECRET: optionalText(z.string()),
     PROJECT_ID: z.uuid(),
     SUPABASE_URL: z.url(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
@@ -37,13 +45,19 @@ const schema = z
   })
   .superRefine((env, ctx) => {
     if (env.AXIS_ENABLED) {
-      for (const key of AXIS_VARS) {
-        if (env[key] !== undefined) continue;
-        ctx.addIssue({
-          code: "custom",
-          message: `${key} is required unless AXIS_ENABLED=false`,
-          path: [key],
-        });
+      for (const [key, field] of Object.entries(AXIS_FIELDS)) {
+        const value = env[key as keyof typeof AXIS_FIELDS];
+        if (value === undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: `${key} is required unless AXIS_ENABLED=false`,
+            path: [key],
+          });
+          continue;
+        }
+        const parsed = field.safeParse(value);
+        if (parsed.success) continue;
+        for (const issue of parsed.error.issues) ctx.addIssue({ ...issue, path: [key] });
       }
     }
     if (env.ANALYSIS_ENABLED && !env.OPENAI_API_KEY) {
