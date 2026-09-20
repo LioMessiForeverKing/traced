@@ -190,10 +190,10 @@ its id is what you pass as the second argument.
 
 Every table has RLS on and one `SELECT` policy, `TO authenticated`, allowed to someone with a
 `project_members` row for the project or to a platform admin. There are exactly three `INSERT`
-policies, all of them a platform admin uploading a clip by hand, and no `UPDATE` or `DELETE` policy
-anywhere for anyone. The intake holds the service-role key and writes everything a camera sends,
-and the service role bypasses RLS. A dashboard bug can therefore add an upload and still cannot
-alter evidence.
+policies and one `UPDATE` policy, all of them a platform admin uploading a clip by hand, no
+`DELETE` policy anywhere for anyone, and the update reaches a single column of a single row. The
+intake holds the service-role key and writes everything a camera sends, and the service role
+bypasses RLS. A dashboard bug can therefore add an upload and still cannot alter evidence.
 
 That row carries a `role`, and there are two of them. A `member` is the contractor and sees the
 project whole. A `viewer` is the insurance side and sees the record of the work, not the site
@@ -257,12 +257,23 @@ shape `parseRecordingName` can never match, so the two namespaces cannot collide
 insert can never land on a camera's recording. The object row must point at `<recording_name>/<name>`
 exactly, so it cannot claim footage that belongs to something else. And the recording must be born
 unanalysed — `pending`, no attempts, no error, no `analysed_at` — because those columns belong to
-the analyser, and a row inserted as `done` would never be claimed and, with no `UPDATE` policy to
-undo it, could never be put right from a browser again.
-Nothing may be updated or deleted afterwards, by anyone, including the admin who uploaded it. The
-three policies are append-only rather than write-once: an admin can still add a second object row
-to their own upload under a name not already taken, which a member would then see as a second clip.
-Nobody else can, and no existing row or byte can be changed.
+the analyser, and a row inserted as `done` would never be claimed and could never be put right from
+a browser again.
+
+The order those three happen in is itself enforced. The recording goes in as `status = 'uploading'`,
+which is a status the analyser's claim never matches, so it cannot pick up a recording whose clip is
+still on its way; the bucket key and the object row are both refused unless a recording in exactly
+that state is waiting for them; and only then may the admin move the row to `complete`. That last
+step is the one `UPDATE` policy in the database. It admits an admin's own upload while it is
+`uploading` and admits nothing but `complete` as the result, so it runs once and never back — a
+`complete` row stops matching the policy that would have changed it. A policy cannot compare the
+new row against the old one, so what keeps it to a single column is the grant underneath: `UPDATE`
+is revoked from `anon` and `authenticated` on the whole table and re-granted on `status` alone, and
+an admin sending `meta` or `analysis_status` alongside the flip is refused by Postgres before any
+policy is consulted.
+
+Once the row says `complete`, nothing may be updated or deleted, by anyone, including the admin who
+uploaded it — not a second object row, not another byte in the folder, not the status back again.
 
 The split runs that way round deliberately. The member-only predicate is the one a table keeps by
 default, so a table nobody has thought about shows a viewer nothing until someone widens it on
@@ -299,13 +310,19 @@ role it replaced. It also grants an admin, signs in as one, and reads a second p
 was never added to.
 
 `test/upload.live.test.ts` covers an admin putting a clip in without a camera, the whole way
-through: it signs in with the publishable key, mints a signed upload URL, puts a real mp4 at
-`<recording>/clip.mp4`, inserts the recording and its object row, and then runs the analyser
-unchanged — which claims the row, pulls frames out of the uploaded bytes through a signed URL, and
-writes `recording_events`. Around that it asserts the shape of the hole: the same upload is refused
-to a member and to a viewer, a recording claiming `source = 'axis'` or a camera-shaped name is
-refused, an object row pointing anywhere but its own folder is refused, an object row onto a
-camera's recording is refused, and the admin who uploaded it cannot then update the row, delete the
+through, in the order the browser has to take: it signs in with the publishable key, is refused the
+bytes while no row is waiting for them, inserts the recording as `uploading`, mints a signed upload
+URL, puts a real mp4 at `<recording>/clip.mp4`, inserts the object row, moves the row to `complete`,
+and then runs the analyser unchanged — which claims the row, pulls frames out of the uploaded bytes
+through a signed URL, and writes `recording_events`. In between it parks a second recording at the
+head of the analyser's queue and runs a real claim while the upload is still `uploading`, to watch
+the analyser take that one and leave the upload alone. Around that it asserts the shape of the hole:
+the same upload is refused to a member and to a viewer, a recording claiming `source = 'axis'`, a
+camera-shaped name or a status other than `uploading` is refused, an object row pointing anywhere
+but its own folder is refused, a bucket key under a camera's recording is refused, the flip is
+refused on a camera's recording and to a member and a viewer, sending any second column with the
+flip is refused by the grant while sending any status but `complete` is refused by the policy, and
+once the row is `complete` the admin cannot add a second clip, move the status back, delete the
 events or overwrite the bytes. The member plays it; the insurer reads the record and its events and
 is refused the object row and a signed URL.
 
@@ -329,12 +346,10 @@ npm run audit:comments
 - No content encryption (`WantEncryption: false`).
 - Supabase Storage on the free plan caps a single upload at 50 MB. Long clips will 500 until the
   plan or the upload path changes, and that now blocks the admin upload as well as the offload.
-- An upload's recording row is complete before its object row exists, and the two inserts are
-  adjacent calls from the browser. If the analyser claims in between — about a tenth of a second
-  against a fifteen-second poll — the recording fails once with `has no clip to analyse` and the
-  existing retry picks it up ten minutes later. Closing it needs an `UPDATE` policy to move the row
-  to complete after the clip lands, which is a second hole in the write boundary and has not been
-  opened for a window this size.
+- An upload whose browser goes away mid-transfer leaves its row at `status = 'uploading'` for good.
+  Nothing sweeps it: the analyser will not claim it, the storage folder stays open to an admin, and
+  only a person looking at the processing log will know it is there. That is the price of closing
+  the window the other way round, and it is a visible row rather than a lost shift.
 - **The analysis has never seen real construction footage.** The whole path has run against the
   real OpenAI API and real Supabase, but only on synthetic test-pattern video, where the correct
   answer is an empty event list. Whether the events are any good is still unknown.
