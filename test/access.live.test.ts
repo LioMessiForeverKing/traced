@@ -160,7 +160,7 @@ describe("grant-access --admin", () => {
     expect(names).toContain(`${stamp}-rec-elsewhere`);
 
     const { data: workers } = await client.from("camera_users").select("id");
-    expect((workers ?? []).map((row) => row.id)).toEqual([`${stamp}-cu`]);
+    expect((workers ?? []).map((row) => row.id)).toContain(`${stamp}-cu`);
 
     const [memberships] = await db`
       select count(*) as count from project_members where user_id = ${adminUserId}

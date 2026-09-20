@@ -129,7 +129,7 @@ describe("recordings bucket", () => {
 
   it("lists every recording's folder for a platform admin", async () => {
     const boss = await signIn("boss");
-    const { data } = await boss.storage.from(bucket).list("");
+    const { data } = await boss.storage.from(bucket).list("", { limit: 100, search: stamp });
     const names = (data ?? []).map((entry) => entry.name);
     expect(names).toContain(`${stamp}-rec-a`);
     expect(names).toContain(`${stamp}-rec-b`);

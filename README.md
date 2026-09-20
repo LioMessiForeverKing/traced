@@ -177,9 +177,11 @@ output names the role it replaced, so nobody is quietly downgraded.
 npm run grant-access -- ops@traced.example --admin
 ```
 
-`--admin` grants the platform side: a row in `platform_admins` and no project membership at all,
-because an admin reads every project already. It takes no project id and no `--role`, and the
-command refuses both rather than guessing which one you meant.
+`--admin` grants the platform side: a row in `platform_admins`, because an admin reads every
+project already and needs no membership to do it. It takes no project id and no `--role`, and
+refuses both rather than guessing which one you meant. It never touches `project_members` — an
+account that was already a member of a site keeps that row, so promoting somebody adds access and
+does not quietly take away what they had.
 
 It does not create projects. A new site is one `insert into projects (name) values ('...')`, and
 its id is what you pass as the second argument.
@@ -236,8 +238,11 @@ the `storage.objects` one, so nothing had to be rewritten and nothing can be lef
 is that two of the four now have names that overstate what they check — `is_project_member` is true
 for an admin who is a member of nothing. They answer *may this account act as a member here*, and
 `project_members` remains the only answer to *is this account a member*. A platform admin is above
-projects, so they hold no membership row and never appear in a project's roster; `platform_admins`
-is readable only by an admin, so a contractor cannot enumerate who is watching.
+projects: the role is a `platform_admins` row and never a `project_members` one, so granting it puts
+nobody on a roster — though an account promoted from member keeps the row it already had, because
+`--admin` adds access and never removes it. A roster therefore answers *who is a member here*, and
+never *who can read this*. `platform_admins` is readable only by an admin, so a contractor cannot
+enumerate who is watching.
 
 The split runs that way round deliberately. The member-only predicate is the one a table keeps by
 default, so a table nobody has thought about shows a viewer nothing until someone widens it on

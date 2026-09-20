@@ -265,6 +265,22 @@ describe("row level security", () => {
     ).rejects.toThrow();
   });
 
+  it("refuses an ordinary member the one insert that would make them an admin", async () => {
+    await expect(
+      db.begin(async (tx) => {
+        const claims = JSON.stringify({ sub: account.alice, role: "authenticated" });
+        await tx`select set_config('request.jwt.claims', ${claims}, true)`;
+        await tx`select set_config('role', 'authenticated', true)`;
+        await tx`insert into platform_admins (user_id) values (${account.alice})`;
+      }),
+    ).rejects.toThrow();
+
+    const [rows] = await db`
+      select count(*) as count from platform_admins where user_id = ${account.alice}
+    `;
+    expect(Number(rows.count)).toBe(0);
+  });
+
   it("shows a signed-in non-member nothing", async () => {
     expect(await visibleTo(account.outsider)).toEqual(nothing);
   });

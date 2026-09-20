@@ -52,8 +52,9 @@ because an admin is above projects rather than a member of each. `public.is_admi
 into all four access functions, so every policy inherits an admin without a single policy being
 rewritten — **which means `is_project_member` and `is_recording_member` now return true for someone
 holding no `project_members` row at all.** Read those four as *may act as a member here*, never as
-a fact about membership; `project_members` is the only thing that answers that question. The
-admin roster itself is readable only by an admin.
+a fact about membership; `project_members` is the only thing that answers that question. Granting
+admin adds no membership row and removes none, so an admin may or may not also hold one. The admin
+roster itself is readable only by an admin.
 
 **The Axis protocol** — `src/axis/` is a module, not the spine. `src/axis/app.ts` is the wire and
 the spec is `github.com/AxisCommunications/body-worn-integration-api`; change the wire only with the

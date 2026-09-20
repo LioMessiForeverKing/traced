@@ -129,14 +129,13 @@ export async function grantAdmin(env: Env, request: AdminRequest): Promise<Admin
   try {
     const { user, password } = await findOrCreateUser(db, admin, email, request.password);
 
-    const [existing] = await db
-      .select({ userId: platformAdmins.userId })
-      .from(platformAdmins)
-      .where(eq(platformAdmins.userId, user.id));
+    const inserted = await db
+      .insert(platformAdmins)
+      .values({ userId: user.id })
+      .onConflictDoNothing()
+      .returning({ userId: platformAdmins.userId });
 
-    await db.insert(platformAdmins).values({ userId: user.id }).onConflictDoNothing();
-
-    return { user, adminCreated: existing === undefined, password };
+    return { user, adminCreated: inserted.length === 1, password };
   } finally {
     await db.$client.end();
   }
