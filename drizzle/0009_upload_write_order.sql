@@ -2,7 +2,7 @@ DROP POLICY "recordings_insert_upload_admin" ON "recordings";--> statement-break
 
 CREATE POLICY "recordings_insert_upload_admin" ON "recordings" AS PERMISSIVE FOR INSERT TO "authenticated" WITH CHECK ((select auth.uid()) is not null and public.is_admin() and "recordings"."source" = 'upload' and starts_with("recordings"."name", 'upload_') and "recordings"."status" = 'uploading' and "recordings"."completed_at" is not null and "recordings"."analysis_status" = 'pending' and "recordings"."analysis_attempts" = 0 and "recordings"."analysed_at" is null and "recordings"."analysis_error" is null);--> statement-breakpoint
 
-CREATE POLICY "recordings_update_upload_complete" ON "recordings" AS PERMISSIVE FOR UPDATE TO "authenticated" USING ((select auth.uid()) is not null and public.is_admin() and "recordings"."source" = 'upload' and "recordings"."status" = 'uploading') WITH CHECK ("recordings"."status" = 'complete' and exists (select 1 from public.recording_objects o where o.recording_name = "recordings"."name" and o.kind = 'clip'));--> statement-breakpoint
+CREATE POLICY "recordings_update_upload_complete" ON "recordings" AS PERMISSIVE FOR UPDATE TO "authenticated" USING ((select auth.uid()) is not null and public.is_admin() and "recordings"."source" = 'upload' and "recordings"."status" = 'uploading') WITH CHECK ("recordings"."status" = 'complete' and exists (select 1 from public.recording_objects o join storage.objects b on b.bucket_id = 'recordings' and b.name = o.storage_path where o.recording_name = "recordings"."name" and o.kind = 'clip'));--> statement-breakpoint
 
 REVOKE UPDATE ON "recordings" FROM "anon", "authenticated";--> statement-breakpoint
 GRANT UPDATE ("status") ON "recordings" TO "authenticated";--> statement-breakpoint

@@ -77,10 +77,11 @@ mechanism: `claimForAnalysis` takes only `complete` rows, so the analyser cannot
 whose clip is still arriving, and both the object-row and bucket-key policies require the recording
 to be sitting in `uploading`, so no *new* authorisation to write into the folder is granted once the
 row says the clip has landed. The flip is the one `UPDATE` policy in the database — `USING` admits
-an admin's own `source = 'upload'` row while it is `uploading`, `WITH CHECK` admits only `complete`
-and only when a `kind = 'clip'` object row already exists, so the analyser can never be handed a
-claimable row with no clip behind it, and it is one-way because a `complete` row no longer satisfies
-`USING`. A row must also be born with a `completed_at`, because that is what orders the analyser's
+an admin's own `source = 'upload'` row while it is `uploading`, `WITH CHECK` admits only `complete`,
+and only when a `kind = 'clip'` object row exists *and* an object is sitting at its `storage_path` —
+the row alone is admin-written and proves nothing, so the check joins `storage.objects` to make the
+bytes the condition. That is as far as a policy can go: it establishes that something is there, never
+that it decodes. The flip is one-way, because a `complete` row no longer satisfies `USING`. A row must also be born with a `completed_at`, because that is what orders the analyser's
 queue and the flip cannot set it later. RLS cannot compare a new row against the old one, so
 the narrowness comes from the grant rather than the policy: `UPDATE` is revoked from `anon` and
 `authenticated` and re-granted on `status` alone, which is also why a later `ADD COLUMN` arrives

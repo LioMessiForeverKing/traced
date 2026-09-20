@@ -60,6 +60,9 @@ function insertPolicy(name: string, predicate: SQL) {
   return pgPolicy(name, { as: "permissive", for: "insert", to: authenticatedRole, withCheck: predicate });
 }
 
+/** What keeps the flip to one column is the `REVOKE UPDATE` / `GRANT UPDATE (status)` pair in
+ * `drizzle/0009`, not this policy: RLS cannot compare a new row against the old one. Drizzle
+ * cannot express a column grant, so the schema alone would build a database without it. */
 function updatePolicy(name: string, using: SQL, withCheck: SQL) {
   return pgPolicy(name, { as: "permissive", for: "update", to: authenticatedRole, using, withCheck });
 }
@@ -194,7 +197,9 @@ export const recordings = pgTable(
       "recordings_update_upload_complete",
       sql`${platformAdmin} and ${table.source} = 'upload' and ${table.status} = 'uploading'`,
       sql`${table.status} = 'complete'
-        and exists (select 1 from public.recording_objects o where o.recording_name = ${table.name} and o.kind = 'clip')`,
+        and exists (select 1 from public.recording_objects o
+          join storage.objects b on b.bucket_id = 'recordings' and b.name = o.storage_path
+          where o.recording_name = ${table.name} and o.kind = 'clip')`,
     ),
   ],
 ).enableRLS();

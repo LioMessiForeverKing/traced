@@ -266,8 +266,11 @@ still on its way; the bucket key and the object row are both refused unless a re
 that state is waiting for them; and only then may the admin move the row to `complete`. That last
 step is the one `UPDATE` policy in the database. It admits an admin's own upload while it is
 `uploading`, admits nothing but `complete` as the result, and refuses even that until a
-`kind = 'clip'` object row exists — so the analyser can never be handed a row it will claim and
-then fail on for want of a clip. It runs once and never back: a `complete` row stops matching the
+`kind = 'clip'` object row exists and an object is actually sitting at the path it names. The row
+on its own would prove nothing, since the admin writes it, so the check joins `storage.objects` and
+makes the bytes the condition — the analyser cannot be handed a row it will claim and then fail on
+for want of a clip. What no policy can establish is that those bytes decode; `refused` and the
+retries still exist for that. It runs once and never back: a `complete` row stops matching the
 policy that would have changed it. A policy cannot compare the
 new row against the old one, so what keeps it to a single column is the grant underneath: `UPDATE`
 is revoked from `anon` and `authenticated` on the whole table and re-granted on `status` alone, and
@@ -325,11 +328,12 @@ the analyser take that one and leave the upload alone. Around that it asserts th
 the same upload is refused to a member and to a viewer, a recording claiming `source = 'axis'`, a
 camera-shaped name, a status other than `uploading` or no `completed_at` at all is refused, an
 object row pointing anywhere but its own folder is refused, a bucket key under a camera's recording
-is refused, the flip is refused on an upload that has no clip behind it yet, on a camera's
-recording, and to a member and a viewer, sending any second column with the
+is refused, the flip is refused on an upload with no clip row, again on one whose clip
+row points at bytes that were never uploaded, and again on a camera's recording and to a member and
+a viewer, sending any second column with the
 flip is refused by the grant while sending any status but `complete` is refused by the policy, and
-once the row is `complete` the admin cannot add a second clip, move the status back, delete the
-events or overwrite the bytes. The member plays it; the insurer reads the record and its events and
+once the row is `complete` the admin cannot add a second clip, move the status back or overwrite
+the bytes, and once the analyser has written events the admin cannot delete those either. The member plays it; the insurer reads the record and its events and
 is refused the object row and a signed URL.
 
 All four delete their fixtures and auth users afterwards. None is in CI, because they need live

@@ -317,17 +317,35 @@ describe("an admin uploading a clip", () => {
     expect(row!.analysis_attempts).toBe(0);
   }, 120_000);
 
-  it("refuses the flip until a clip has actually landed", async () => {
+  it("refuses the flip until a clip row exists and its bytes are there", async () => {
     const boss = as("boss");
     const born = await boss.from("recordings").insert(recordingRow({ name: clipless }));
     expect(born.error).toBeNull();
 
-    const early = await boss
+    const withNothingBehindIt = await boss
       .from("recordings")
       .update({ status: "complete" })
       .eq("name", clipless)
       .select();
-    expect(early.error?.message).toMatch(/row-level security/);
+    expect(withNothingBehindIt.error?.message).toMatch(/row-level security/);
+
+    const claimed = await boss.from("recording_objects").insert({
+      recording_name: clipless,
+      name: "clip.mp4",
+      kind: "clip",
+      storage_path: `${clipless}/clip.mp4`,
+      content_type: "video/mp4",
+      size_bytes: clipBytes.length,
+      meta: {},
+    });
+    expect(claimed.error).toBeNull();
+
+    const withNoBytes = await boss
+      .from("recordings")
+      .update({ status: "complete" })
+      .eq("name", clipless)
+      .select();
+    expect(withNoBytes.error?.message).toMatch(/row-level security/);
 
     const [row] = await db`select status from recordings where name = ${clipless}`;
     expect(row!.status).toBe("uploading");
@@ -418,9 +436,6 @@ describe("an admin uploading a clip", () => {
     expect(backToUploading.error).toBeNull();
     expect(backToUploading.data).toEqual([]);
 
-    const deleted = await boss.from("recording_events").delete().eq("recording_name", recording).select();
-    expect(deleted.data).toEqual([]);
-
     const overwritten = await boss.storage
       .from(bucket)
       .upload(clipPath, new Uint8Array([9, 9, 9]), { contentType: "video/mp4", upsert: true });
@@ -462,6 +477,19 @@ describe("an admin uploading a clip", () => {
     `;
     expect(events.map((event) => event.description)).toEqual([DESCRIBED]);
   }, 120_000);
+
+  it("refuses the admin the delete now that there are events to delete", async () => {
+    const boss = as("boss");
+    const before = await db`select count(*)::int from recording_events where recording_name = ${recording}`;
+    expect(before[0]!.count).toBe(1);
+
+    const deleted = await boss.from("recording_events").delete().eq("recording_name", recording).select();
+    expect(deleted.error).toBeNull();
+    expect(deleted.data).toEqual([]);
+
+    const after = await db`select count(*)::int from recording_events where recording_name = ${recording}`;
+    expect(after[0]!.count).toBe(1);
+  });
 
   it("plays for a member of the project", async () => {
     const alice = as("alice");
