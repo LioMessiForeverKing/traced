@@ -273,7 +273,7 @@ describe("row level security", () => {
         await tx`select set_config('role', 'authenticated', true)`;
         await tx`insert into platform_admins (user_id) values (${account.alice})`;
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/row-level security|permission denied/);
 
     const [rows] = await db`
       select count(*) as count from platform_admins where user_id = ${account.alice}
