@@ -1,17 +1,16 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { AxisIngestStore, PutObjectInput, RecordingName } from "../axis/store.js";
+import { metaTime, recordingStatus } from "../axis/swift.js";
 import {
   MAX_ANALYSIS_ATTEMPTS,
   RETRY_AFTER_MS,
   type AnalysisClaim,
   type AnalysisEvent,
+  type AnalysisStore,
   type Meta,
-  type PutObjectInput,
-  type RecordingName,
-  type RecordingStore,
 } from "../store.js";
-import { metaTime, recordingStatus } from "../swift.js";
 
 export interface MemoryRecording extends RecordingName {
   status: string;
@@ -37,7 +36,7 @@ async function collect(body: ReadableStream<Uint8Array> | null): Promise<Buffer>
   return Buffer.from(await new Response(body).arrayBuffer());
 }
 
-export class MemoryStore implements RecordingStore {
+export class MemoryStore implements AxisIngestStore, AnalysisStore {
   readonly systems = new Map<string, Meta>();
   readonly cameraUsers = new Map<string, Meta>();
   readonly devices = new Map<string, Meta>();

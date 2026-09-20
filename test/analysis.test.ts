@@ -4,13 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import ffmpegStatic from "ffmpeg-static";
-import { createApp } from "../src/app.js";
+import { createAxisApp } from "../src/axis/app.js";
 import { createAnalysisLoop, toAnalysisEvents } from "../src/analysis/loop.js";
 import type { EventExtractor, ExtractedEvent, ExtractInput } from "../src/analysis/extractor.js";
 import { UnanalysableRecording, redactUrls, sampleFrames } from "../src/analysis/frames.js";
 import { MAX_ANALYSIS_ATTEMPTS, RETRY_AFTER_MS } from "../src/store.js";
 import { MemoryStore } from "../src/stores/memory.js";
-import { runFakeW800 } from "../src/testing/fake-w800.js";
+import { runFakeW800 } from "../src/axis/testing/fake-w800.js";
 import { CREDS, PUBLIC_URL } from "./credentials.js";
 
 const FFMPEG = ffmpegStatic as unknown as string | null;
@@ -135,7 +135,7 @@ describe("sampling frames out of a clip", () => {
 
 describe("a complete recording becoming events", () => {
   async function offload(store: MemoryStore) {
-    const app = createApp({ store, publicUrl: PUBLIC_URL, ...CREDS });
+    const app = createAxisApp({ store, publicUrl: PUBLIC_URL, ...CREDS });
     return runFakeW800({
       baseUrl: PUBLIC_URL,
       username: CREDS.username,

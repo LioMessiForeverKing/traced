@@ -47,8 +47,12 @@ table gets `memberOf`, the member-only predicate, and only a deliberate decision
 `accessTo`. That direction is the safety property: a table nobody thought about shows an insurer
 too little, never too much.
 
-**The Axis protocol** — `src/app.ts` is the wire. The spec is
-`github.com/AxisCommunications/body-worn-integration-api`. Change the wire only with the spec open.
+**The Axis protocol** — `src/axis/` is a module, not the spine. `src/axis/app.ts` is the wire and
+the spec is `github.com/AxisCommunications/body-worn-integration-api`; change the wire only with the
+spec open. `AXIS_ENABLED=false` starts the process without it, and without the four `CD_` values —
+which is the point of the folder, because a clip can also arrive from a person with a file. Nothing
+under `src/analysis/`, `src/db/` or `src/store.ts` may import from `src/axis/`; the store
+implementations in `src/stores/` may, because they are where the wire meets Postgres.
 
 **`docs/OPERATOR.md`** is the runbook for whoever has the hardware, and it is the one document in
 this repo written for someone who is not changing the code. Every step in it that nobody has

@@ -4,17 +4,16 @@ import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { createDb } from "../db/client.js";
 import { bwsSystems, cameraUsers, devices, recordingEvents, recordingObjects, recordings } from "../db/schema.js";
 import type { Env } from "../env.js";
+import type { AxisIngestStore, PutObjectInput, RecordingName } from "../axis/store.js";
+import { metaTime, recordingStatus } from "../axis/swift.js";
 import {
   MAX_ANALYSIS_ATTEMPTS,
   RETRY_AFTER_MS,
   type AnalysisClaim,
   type AnalysisEvent,
+  type AnalysisStore,
   type Meta,
-  type PutObjectInput,
-  type RecordingName,
-  type RecordingStore,
 } from "../store.js";
-import { metaTime, recordingStatus } from "../swift.js";
 
 function activeFlag(meta: Meta): boolean | null {
   const value = meta.active?.toLowerCase();
@@ -29,7 +28,7 @@ function mergedMeta(column: AnyPgColumn, meta: Meta) {
 
 const CLIP_URL_TTL_SECONDS = 60 * 60;
 
-export function createSupabaseStore(env: Env): RecordingStore {
+export function createSupabaseStore(env: Env): AxisIngestStore & AnalysisStore {
   const db = createDb(env.DATABASE_URL);
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
