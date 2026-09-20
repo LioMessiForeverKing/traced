@@ -57,6 +57,13 @@
       "when": 1789238792472,
       "tag": "0007_platform_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789325192472,
+      "tag": "0008_admin_uploads",
+      "breakpoints": true
     }
   ]
 }

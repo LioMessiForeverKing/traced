@@ -38,9 +38,10 @@ never leaves the server. Config lives in `.env.local`, never in the repo.
 
 **Access** — policies live in `src/db/schema.ts` as `pgPolicy`, not in hand-written SQL, so the
 schema stays the single source of truth. Every table gets one `SELECT` policy for `authenticated`,
-gated on project membership; nothing browser-facing writes, so there are no write policies to add
-without a decision to change that. `npm run test:rls` proves them against the real project and is
-the gate before any policy change ships.
+gated on project membership. The only writes a browser may make are the three `INSERT` policies of
+the admin upload path; a member and a viewer write nothing anywhere, and no table has an `UPDATE` or
+`DELETE` policy, so evidence can be added by an admin and altered by nobody. `npm run test:rls`
+proves them against the real project and is the gate before any policy change ships.
 
 `project_members.role` is `member` or `viewer` — the contractor and the insurance side. A new
 table gets `memberOf`, the member-only predicate, and only a deliberate decision widens it to
@@ -55,6 +56,16 @@ holding no `project_members` row at all.** Read those four as *may act as a memb
 a fact about membership; `project_members` is the only thing that answers that question. Granting
 admin adds no membership row and removes none, so an admin may or may not also hold one. The admin
 roster itself is readable only by an admin.
+
+**Uploads** — `recordings.source` is `axis` or `upload` and defaults to `axis`, so the wire needed
+no change to gain it. An uploaded recording is named by `src/uploads.ts` and always begins
+`upload_`, which `parseRecordingName` can never return a match for; that disjointness is the whole
+reason a browser insert cannot land on a camera's row, and the policy enforces the prefix rather
+than trusting it. The three inserts are narrowed the same way — `source = 'upload'` only, an object
+row only where `storage_path` is exactly `<recording>/<name>` and the recording is an upload, and a
+bucket key only under an `upload_` folder. `public.is_upload_recording(text)` is a sixth
+`SECURITY DEFINER` function and answers only where a row came from; it is not an access predicate
+and nothing may read it as one.
 
 **The Axis protocol** — `src/axis/` is a module, not the spine. `src/axis/app.ts` is the wire and
 the spec is `github.com/AxisCommunications/body-worn-integration-api`; change the wire only with the

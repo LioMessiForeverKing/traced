@@ -188,11 +188,12 @@ its id is what you pass as the second argument.
 
 ## Who can read what
 
-Every table has RLS on and exactly one policy: `SELECT`, `TO authenticated`, allowed to someone
-with a `project_members` row for the project or to a platform admin. There are no `INSERT`,
-`UPDATE` or `DELETE` policies anywhere, for anyone, admin included — the browser never writes. The
-intake holds the service-role key and writes everything, and the service role bypasses RLS. A
-dashboard bug therefore cannot alter evidence.
+Every table has RLS on and one `SELECT` policy, `TO authenticated`, allowed to someone with a
+`project_members` row for the project or to a platform admin. There are exactly three `INSERT`
+policies, all of them a platform admin uploading a clip by hand, and no `UPDATE` or `DELETE` policy
+anywhere for anyone. The intake holds the service-role key and writes everything a camera sends,
+and the service role bypasses RLS. A dashboard bug can therefore add an upload and still cannot
+alter evidence.
 
 That row carries a `role`, and there are two of them. A `member` is the contractor and sees the
 project whole. A `viewer` is the insurance side and sees the record of the work, not the site
@@ -244,6 +245,19 @@ nobody on a roster — though an account promoted from member keeps the row it a
 never *who can read this*. `platform_admins` is readable only by an admin, so a contractor cannot
 enumerate who is watching.
 
+A clip does not have to come from a camera. `recordings.source` is `axis` or `upload` and defaults
+to `axis`, so nothing the W800 sends changed, and an admin signed in to the browser may insert a
+recording of their own, the object row for it, and the bytes at `<recording>/clip.mp4`. The
+analyser never learned about any of this: it claims a complete recording out of Postgres and has
+never cared how the row got there.
+
+Three things keep that hole the size it is. The insert is admin-only, so a member and a viewer are
+refused all three. The recording must be `source = 'upload'` and its name must begin `upload_` — a
+shape `parseRecordingName` can never match, so the two namespaces cannot collide and a browser
+insert can never land on a camera's recording. And the object row must point at
+`<recording_name>/<name>` exactly, so it cannot claim footage that belongs to something else.
+Nothing may be updated or deleted afterwards, by anyone, including the admin who uploaded it.
+
 The split runs that way round deliberately. The member-only predicate is the one a table keeps by
 default, so a table nobody has thought about shows a viewer nothing until someone widens it on
 purpose — the failure is an insurer seeing too little, never too much. `storage.objects` needed no
@@ -253,7 +267,7 @@ edit at all to stay shut.
 npm run test:rls
 ```
 
-That suite runs against the real project, in two halves.
+That suite runs against the real project, in four files.
 
 `test/rls.live.test.ts` covers the tables: two throwaway projects, five real auth users, a
 recording seeded in each, then every table read as each user with `SET ROLE authenticated` and a
@@ -261,7 +275,8 @@ recording seeded in each, then every table read as each user with `SET ROLE auth
 the same site sees the record and none of the site around it, a signed-in non-member sees zero
 rows, an anonymous visitor sees zero rows, a member's `INSERT` is refused. A platform admin sees
 both sites whole while holding no membership row, sees the admin roster that everyone else is
-refused, and has their `INSERT` refused too — an admin reads everything and still writes nothing.
+refused, and is refused an `INSERT` into `recording_events` too — the three inserts an admin does
+have are the upload path and nothing else.
 
 `test/storage.live.test.ts` covers the bytes, and takes the path a browser actually takes: it signs
 in with `SUPABASE_PUBLISHABLE_KEY` to get a real session, mints a signed URL, and streams it. A
@@ -277,7 +292,18 @@ that a `viewer` grant reads the events but not `camera_users`, and that changing
 role it replaced. It also grants an admin, signs in as one, and reads a second project that account
 was never added to.
 
-All three delete their fixtures and auth users afterwards. None is in CI, because they need live
+`test/upload.live.test.ts` covers an admin putting a clip in without a camera, the whole way
+through: it signs in with the publishable key, mints a signed upload URL, puts a real mp4 at
+`<recording>/clip.mp4`, inserts the recording and its object row, and then runs the analyser
+unchanged — which claims the row, pulls frames out of the uploaded bytes through a signed URL, and
+writes `recording_events`. Around that it asserts the shape of the hole: the same upload is refused
+to a member and to a viewer, a recording claiming `source = 'axis'` or a camera-shaped name is
+refused, an object row pointing anywhere but its own folder is refused, an object row onto a
+camera's recording is refused, and the admin who uploaded it cannot then update the row, delete the
+events or overwrite the bytes. The member plays it; the insurer reads the record and its events and
+is refused the object row and a signed URL.
+
+All four delete their fixtures and auth users afterwards. None is in CI, because they need live
 credentials — run them before deploying a policy or access change.
 
 ## Verify
@@ -296,7 +322,13 @@ npm run audit:comments
   blocks every hardware test.
 - No content encryption (`WantEncryption: false`).
 - Supabase Storage on the free plan caps a single upload at 50 MB. Long clips will 500 until the
-  plan or the upload path changes.
+  plan or the upload path changes, and that now blocks the admin upload as well as the offload.
+- An upload's recording row is complete before its object row exists, and the two inserts are
+  adjacent calls from the browser. If the analyser claims in between — about a tenth of a second
+  against a fifteen-second poll — the recording fails once with `has no clip to analyse` and the
+  existing retry picks it up ten minutes later. Closing it needs an `UPDATE` policy to move the row
+  to complete after the clip lands, which is a second hole in the write boundary and has not been
+  opened for a window this size.
 - **The analysis has never seen real construction footage.** The whole path has run against the
   real OpenAI API and real Supabase, but only on synthetic test-pattern video, where the correct
   answer is an empty event list. Whether the events are any good is still unknown.
