@@ -265,6 +265,12 @@ describe("an admin uploading a clip", () => {
     `;
     expect(next?.name).toBe(recording);
 
+    const elsewhere = async () => db`
+      select name, analysis_status, analysis_attempts, analysed_at
+      from recordings where name <> ${recording} order by name
+    `;
+    const before = await elsewhere();
+
     const loop = createAnalysisLoop({
       store: createSupabaseStore(env),
       extractor,
@@ -276,6 +282,7 @@ describe("an admin uploading a clip", () => {
       log: () => {},
     });
     expect(await loop.runOnce()).toBe(recording);
+    expect(await elsewhere()).toEqual(before);
 
     expect(framesSeen).toBeGreaterThan(1);
     const [row] = await db`
