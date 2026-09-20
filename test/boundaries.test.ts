@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const CORE = ["src/analysis", "src/db", "src/store.ts"];
-const IMPORTS_AXIS = /from\s+"[^"]*axis[/]/;
+const IMPORTS_AXIS = /\b(?:from|import)\b[^\n]*?["'][^"']*axis[/]/;
 
 async function sources(path: string): Promise<string[]> {
   if (path.endsWith(".ts")) return [path];
