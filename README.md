@@ -26,6 +26,10 @@ npm run dev
 
 `CD_PUBLIC_URL` must be the address the W800 can reach on your network, not `localhost`.
 
+`AXIS_ENABLED` mounts the Axis wire and defaults to `true`. Set it to `false` and the four `CD_`
+values are not needed at all: the process runs the analyser alone, for clips that arrive some other
+way than from a docked camera.
+
 `PROJECT_ID` is the site this intake serves. One deployment serves one W800, which serves one
 construction site, so the project is configuration rather than something the Axis protocol carries.
 Migration `0003` seeds a `Bootstrap project` row at `00000000-0000-4000-8000-000000000001` for

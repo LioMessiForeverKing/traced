@@ -5,13 +5,16 @@ const booleanish = z
   .default("true")
   .transform((value) => value === "true");
 
+const AXIS_VARS = ["CD_PUBLIC_URL", "CD_USERNAME", "CD_PASSWORD", "CD_TOKEN_SECRET"] as const;
+
 const schema = z
   .object({
     PORT: z.coerce.number().int().positive().default(8080),
-    CD_PUBLIC_URL: z.url(),
-    CD_USERNAME: z.string().min(1),
-    CD_PASSWORD: z.string().min(8),
-    CD_TOKEN_SECRET: z.string().min(16),
+    AXIS_ENABLED: booleanish,
+    CD_PUBLIC_URL: z.url().optional(),
+    CD_USERNAME: z.string().min(1).optional(),
+    CD_PASSWORD: z.string().min(8).optional(),
+    CD_TOKEN_SECRET: z.string().min(16).optional(),
     PROJECT_ID: z.uuid(),
     SUPABASE_URL: z.url(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
@@ -25,12 +28,37 @@ const schema = z
     OPENAI_API_KEY: z.string().min(1).optional(),
     OPENAI_MODEL: z.string().min(1).default("gpt-5.5"),
   })
-  .refine((env) => !env.ANALYSIS_ENABLED || Boolean(env.OPENAI_API_KEY), {
-    message: "OPENAI_API_KEY is required unless ANALYSIS_ENABLED=false",
-    path: ["OPENAI_API_KEY"],
+  .superRefine((env, ctx) => {
+    if (env.AXIS_ENABLED) {
+      for (const key of AXIS_VARS) {
+        if (env[key] !== undefined) continue;
+        ctx.addIssue({
+          code: "custom",
+          message: `${key} is required unless AXIS_ENABLED=false`,
+          path: [key],
+        });
+      }
+    }
+    if (env.ANALYSIS_ENABLED && !env.OPENAI_API_KEY) {
+      ctx.addIssue({
+        code: "custom",
+        message: "OPENAI_API_KEY is required unless ANALYSIS_ENABLED=false",
+        path: ["OPENAI_API_KEY"],
+      });
+    }
   })
   .transform((env) => ({
     ...env,
+    axis:
+      env.AXIS_ENABLED && env.CD_PUBLIC_URL && env.CD_USERNAME && env.CD_PASSWORD && env.CD_TOKEN_SECRET
+        ? ({
+            enabled: true,
+            publicUrl: env.CD_PUBLIC_URL,
+            username: env.CD_USERNAME,
+            password: env.CD_PASSWORD,
+            tokenSecret: env.CD_TOKEN_SECRET,
+          } as const)
+        : ({ enabled: false } as const),
     analysis:
       env.ANALYSIS_ENABLED && env.OPENAI_API_KEY
         ? ({
@@ -46,6 +74,8 @@ const schema = z
   }));
 
 export type Env = z.infer<typeof schema>;
+
+export type AxisConfig = Extract<Env["axis"], { enabled: true }>;
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   return schema.parse(source);

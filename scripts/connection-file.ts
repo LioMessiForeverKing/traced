@@ -1,18 +1,25 @@
 import { writeFileSync } from "node:fs";
+import { AUTH_PATH } from "../src/axis/index.js";
 import { loadEnv } from "../src/env.js";
 
 const env = loadEnv();
+const axis = env.axis;
+if (!axis.enabled) {
+  console.error("A connection file points a W800 at this server, so it needs AXIS_ENABLED=true and the four CD_ values.");
+  process.exit(1);
+}
+
 const version = process.env.npm_package_version ?? "0.1.0";
 
 const connectionFile = {
   ConnectionFileVersion: "1.0",
-  SiteName: `Traced (${new URL(env.CD_PUBLIC_URL).host})`,
+  SiteName: `Traced (${new URL(axis.publicUrl).host})`,
   ApplicationName: "Traced content destination",
   ApplicationVersion: version,
   ContentDestinationAsNTPServer: false,
-  AuthenticationTokenURI: [`${env.CD_PUBLIC_URL}/auth/v1.0`],
-  BlobAPIKey: env.CD_PASSWORD,
-  BlobAPIUserName: env.CD_USERNAME,
+  AuthenticationTokenURI: [`${axis.publicUrl}${AUTH_PATH}`],
+  BlobAPIKey: axis.password,
+  BlobAPIUserName: axis.username,
   ContainerType: "mp4",
   FullStoreAndReadSupport: false,
   WantEncryption: false,

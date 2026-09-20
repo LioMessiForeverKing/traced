@@ -1,19 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { createApp, STORAGE_PATH } from "../src/app.js";
-import { CAPABILITIES } from "../src/capabilities.js";
+import { STORAGE_PATH, createAxisApp } from "../src/axis/index.js";
+import { CAPABILITIES } from "../src/axis/capabilities.js";
 import { MemoryStore } from "../src/stores/memory.js";
-import { runFakeW800 } from "../src/testing/fake-w800.js";
+import { runFakeW800 } from "../src/axis/testing/fake-w800.js";
 import { createHash } from "node:crypto";
 import { CREDS, PUBLIC_URL } from "./credentials.js";
 
 function harness(now = () => Date.parse("2026-09-08T18:00:00Z")) {
   const store = new MemoryStore();
-  const app = createApp({ store, publicUrl: PUBLIC_URL, ...CREDS, now });
+  const app = createAxisApp({ store, publicUrl: PUBLIC_URL, ...CREDS, now });
   const fetchLike = async (url: string, init?: RequestInit) => app.request(url, init);
   return { store, app, fetchLike };
 }
 
-async function authenticate(app: ReturnType<typeof createApp>) {
+async function authenticate(app: ReturnType<typeof createAxisApp>) {
   const response = await app.request(`${PUBLIC_URL}/auth/v1.0`, {
     headers: { "X-Auth-User": CREDS.username, "X-Auth-Key": CREDS.password },
   });

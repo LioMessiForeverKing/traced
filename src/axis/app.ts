@@ -3,14 +3,15 @@ import { logger } from "hono/logger";
 import { createHash } from "node:crypto";
 import { credentialsMatch, mintToken, verifyToken } from "./auth.js";
 import { CAPABILITIES, CATEGORIES } from "./capabilities.js";
-import type { RecordingStore } from "./store.js";
+import type { AxisIngestStore } from "./store.js";
 import { classifyObject, FIXED_CONTAINERS, parseMeta, parseRecordingName } from "./swift.js";
 
 export const ACCOUNT = "traced";
 export const STORAGE_PATH = `/v1/${ACCOUNT}`;
+export const AUTH_PATH = "/auth/v1.0";
 
-export interface AppDeps {
-  store: RecordingStore;
+export interface AxisAppDeps {
+  store: AxisIngestStore;
   publicUrl: string;
   username: string;
   password: string;
@@ -33,12 +34,12 @@ function sizeFrom(header: string | undefined): number | null {
   return Number(header);
 }
 
-export function createApp(deps: AppDeps) {
+export function createAxisApp(deps: AxisAppDeps) {
   const now = deps.now ?? Date.now;
   const app = new Hono();
   if (deps.logging) app.use(logger());
 
-  app.get("/auth/v1.0", (c) => {
+  app.get(AUTH_PATH, (c) => {
     const user = c.req.header("x-auth-user");
     const key = c.req.header("x-auth-key");
     if (!user || !key || !credentialsMatch(user, key, deps.username, deps.password)) {

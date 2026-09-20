@@ -104,6 +104,7 @@ Then edit `.env.local`. The values that need thought:
 
 | Variable | What to put in it |
 |---|---|
+| `AXIS_ENABLED` | `true`. It defaults to `true`, and it has to be true for any of this — it is what mounts the wire the W800 speaks. `false` runs the intake for browser-uploaded clips only, with none of the `CD_` values set. |
 | `CD_PUBLIC_URL` | The address **the W800 will use**, not `localhost`. Settled in [Part 2](#part-2--put-it-somewhere-the-w800-can-reach). |
 | `CD_USERNAME` / `CD_PASSWORD` | Invent them. These are the credentials the controller uses to log in to you. The password must be at least 8 characters and goes into the connection file in clear text, so treat that file as a secret. |
 | `CD_TOKEN_SECRET` | A random string of at least 16 characters. It signs the 15-minute session tokens the controller gets. Never reuse one across sites. |

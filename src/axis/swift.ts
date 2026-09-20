@@ -1,4 +1,5 @@
-import type { Meta, ObjectKind, RecordingName } from "./store.js";
+import type { Meta } from "../store.js";
+import type { ObjectKind, RecordingName } from "./store.js";
 
 const META_PREFIXES = ["x-object-meta-", "x-container-meta-"];
 const RECORDING = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_([A-Za-z0-9]+)_(\d{8}T\d{6}Z)$/i;

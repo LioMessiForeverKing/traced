@@ -1,21 +1,26 @@
 import { serve } from "@hono/node-server";
-import { createAnalysisLoop } from "./analysis/loop.js";
+import { Hono } from "hono";
 import { createOpenAiExtractor } from "./analysis/extractor.js";
 import { sampleFrames } from "./analysis/frames.js";
-import { createApp, STORAGE_PATH } from "./app.js";
+import { createAnalysisLoop } from "./analysis/loop.js";
+import { AUTH_PATH, STORAGE_PATH, createAxisApp } from "./axis/index.js";
 import { loadEnv } from "./env.js";
 import { createSupabaseStore } from "./stores/supabase.js";
 
 const env = loadEnv();
 const store = createSupabaseStore(env);
-const app = createApp({
-  store,
-  publicUrl: env.CD_PUBLIC_URL,
-  username: env.CD_USERNAME,
-  password: env.CD_PASSWORD,
-  tokenSecret: env.CD_TOKEN_SECRET,
-  logging: true,
-});
+const axis = env.axis;
+
+const app = axis.enabled
+  ? createAxisApp({
+      store,
+      publicUrl: axis.publicUrl,
+      username: axis.username,
+      password: axis.password,
+      tokenSecret: axis.tokenSecret,
+      logging: true,
+    })
+  : new Hono();
 
 if (env.analysis.enabled) {
   createAnalysisLoop({
@@ -34,8 +39,8 @@ serve({ fetch: app.fetch, port: env.PORT }, (info) => {
     JSON.stringify({
       event: "listening",
       port: info.port,
-      authUrl: `${env.CD_PUBLIC_URL}/auth/v1.0`,
-      storageUrl: `${env.CD_PUBLIC_URL}${STORAGE_PATH}`,
+      authUrl: axis.enabled ? `${axis.publicUrl}${AUTH_PATH}` : false,
+      storageUrl: axis.enabled ? `${axis.publicUrl}${STORAGE_PATH}` : false,
       analysis: env.analysis.enabled ? env.analysis.model : false,
     }),
   );
