@@ -5,16 +5,23 @@ const booleanish = z
   .default("true")
   .transform((value) => value === "true");
 
+function optionalText<T extends z.ZodType>(inner: T) {
+  return z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    inner.optional(),
+  );
+}
+
 const AXIS_VARS = ["CD_PUBLIC_URL", "CD_USERNAME", "CD_PASSWORD", "CD_TOKEN_SECRET"] as const;
 
 const schema = z
   .object({
     PORT: z.coerce.number().int().positive().default(8080),
     AXIS_ENABLED: booleanish,
-    CD_PUBLIC_URL: z.url().optional(),
-    CD_USERNAME: z.string().min(1).optional(),
-    CD_PASSWORD: z.string().min(8).optional(),
-    CD_TOKEN_SECRET: z.string().min(16).optional(),
+    CD_PUBLIC_URL: optionalText(z.url()),
+    CD_USERNAME: optionalText(z.string().min(1)),
+    CD_PASSWORD: optionalText(z.string().min(8)),
+    CD_TOKEN_SECRET: optionalText(z.string().min(16)),
     PROJECT_ID: z.uuid(),
     SUPABASE_URL: z.url(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
@@ -25,7 +32,7 @@ const schema = z
     ANALYSIS_MAX_FRAMES: z.coerce.number().int().positive().default(24),
     ANALYSIS_SCENE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.4),
     ANALYSIS_FRAME_WIDTH: z.coerce.number().int().positive().default(768),
-    OPENAI_API_KEY: z.string().min(1).optional(),
+    OPENAI_API_KEY: optionalText(z.string().min(1)),
     OPENAI_MODEL: z.string().min(1).default("gpt-5.5"),
   })
   .superRefine((env, ctx) => {
