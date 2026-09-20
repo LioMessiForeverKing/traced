@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { STORAGE_PATH, createAxisApp } from "../src/axis/index.js";
+import { STORAGE_PATH, createAxisApp } from "../src/axis/app.js";
 import { CAPABILITIES } from "../src/axis/capabilities.js";
 import { MemoryStore } from "../src/stores/memory.js";
 import { runFakeW800 } from "../src/axis/testing/fake-w800.js";

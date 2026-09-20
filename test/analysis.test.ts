@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import ffmpegStatic from "ffmpeg-static";
-import { createAxisApp } from "../src/axis/index.js";
+import { createAxisApp } from "../src/axis/app.js";
 import { createAnalysisLoop, toAnalysisEvents } from "../src/analysis/loop.js";
 import type { EventExtractor, ExtractedEvent, ExtractInput } from "../src/analysis/extractor.js";
 import { UnanalysableRecording, redactUrls, sampleFrames } from "../src/analysis/frames.js";

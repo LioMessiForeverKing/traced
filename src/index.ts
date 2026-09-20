@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { createOpenAiExtractor } from "./analysis/extractor.js";
 import { sampleFrames } from "./analysis/frames.js";
 import { createAnalysisLoop } from "./analysis/loop.js";
-import { AUTH_PATH, STORAGE_PATH, createAxisApp } from "./axis/index.js";
+import { AUTH_PATH, STORAGE_PATH, createAxisApp } from "./axis/app.js";
 import { loadEnv } from "./env.js";
 import { createSupabaseStore } from "./stores/supabase.js";
 

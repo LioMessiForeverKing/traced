@@ -82,8 +82,6 @@ const schema = z
 
 export type Env = z.infer<typeof schema>;
 
-export type AxisConfig = Extract<Env["axis"], { enabled: true }>;
-
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   return schema.parse(source);
 }

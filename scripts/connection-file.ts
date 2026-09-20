@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { AUTH_PATH } from "../src/axis/index.js";
+import { AUTH_PATH } from "../src/axis/app.js";
 import { loadEnv } from "../src/env.js";
 
 const env = loadEnv();
