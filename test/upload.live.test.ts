@@ -231,6 +231,19 @@ describe("an admin uploading a clip", () => {
     expect(error).toBeNull();
   });
 
+  it("refuses a member and a viewer an object row on the admin's upload", async () => {
+    for (const labelled of ["alice", "viewer"]) {
+      const client = await signIn(labelled);
+      const { error } = await client
+        .from("recording_objects")
+        .insert(objectRow({ name: "second.mp4", storage_path: `${recording}/second.mp4` }));
+      expect(error).toBeTruthy();
+    }
+
+    const rows = await db`select name from recording_objects where recording_name = ${recording}`;
+    expect(rows.map((row) => row.name)).toEqual(["clip.mp4"]);
+  });
+
   it("is claimed by the unmodified analyser and becomes events", async () => {
     const [next] = await db`
       select name from recordings

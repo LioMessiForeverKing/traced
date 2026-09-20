@@ -63,9 +63,10 @@ no change to gain it. An uploaded recording is named by `src/uploads.ts` and alw
 reason a browser insert cannot land on a camera's row, and the policy enforces the prefix rather
 than trusting it. The three inserts are narrowed the same way — `source = 'upload'` only, an object
 row only where `storage_path` is exactly `<recording>/<name>` and the recording is an upload, and a
-bucket key only under an `upload_` folder. `public.is_upload_recording(text)` is a sixth
-`SECURITY DEFINER` function and answers only where a row came from; it is not an access predicate
-and nothing may read it as one.
+bucket key only under an `upload_` folder. That middle check is an `exists` inside the policy rather
+than a sixth `SECURITY DEFINER` function, because a function answering *where a row came from* is
+callable over PostgREST by anyone signed in and would answer about rows they cannot read — the five
+that exist all answer about the caller instead, which is why they are safe to expose.
 
 **The Axis protocol** — `src/axis/` is a module, not the spine. `src/axis/app.ts` is the wire and
 the spec is `github.com/AxisCommunications/body-worn-integration-api`; change the wire only with the

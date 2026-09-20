@@ -256,7 +256,10 @@ refused all three. The recording must be `source = 'upload'` and its name must b
 shape `parseRecordingName` can never match, so the two namespaces cannot collide and a browser
 insert can never land on a camera's recording. And the object row must point at
 `<recording_name>/<name>` exactly, so it cannot claim footage that belongs to something else.
-Nothing may be updated or deleted afterwards, by anyone, including the admin who uploaded it.
+Nothing may be updated or deleted afterwards, by anyone, including the admin who uploaded it. The
+three policies are append-only rather than write-once: an admin can still add a second object row
+to their own upload under a name not already taken, which a member would then see as a second clip.
+Nobody else can, and no existing row or byte can be changed.
 
 The split runs that way round deliberately. The member-only predicate is the one a table keeps by
 default, so a table nobody has thought about shows a viewer nothing until someone widens it on

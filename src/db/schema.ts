@@ -49,7 +49,7 @@ const platformAdmin = sql`${signedIn} and public.is_admin()`;
 const uploadPrefix = sql.raw(`'${UPLOAD_NAME_PREFIX}'`);
 
 function uploadOf(recording: AnyPgColumn) {
-  return sql`${platformAdmin} and public.is_upload_recording(${recording})`;
+  return sql`${platformAdmin} and exists (select 1 from public.recordings r where r.name = ${recording} and r.source = 'upload')`;
 }
 
 function selectPolicy(name: string, predicate: SQL) {
