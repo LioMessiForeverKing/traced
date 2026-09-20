@@ -129,8 +129,9 @@ Put that id in `PROJECT_ID`.
 ### 4. Apply the migrations
 
 The SQL in `drizzle/` runs in numeric order against your project's database. Apply `0000` through
-`0007`. Afterwards every table has row level security on with exactly one `SELECT` policy, and the
-`recordings` bucket has a matching one.
+`0008`. Afterwards every table has row level security on with exactly one `SELECT` policy, and the
+`recordings` bucket has a matching one. `0008` adds the only three `INSERT` policies in the
+database, all of them for a platform admin uploading a clip by hand.
 
 ### 5. Start it
 
@@ -187,8 +188,10 @@ For yourself, if you need to see every site rather than one:
 npm run grant-access -- you@example.com --admin
 ```
 
-That is a platform admin: no project membership, and every project readable. It still writes
-nothing — an admin reads the record like everyone else does, and only this intake writes to it.
+That is a platform admin: no project membership, and every project readable. The one thing an admin
+may write is an uploaded clip — a recording whose `source` is `upload`, its object row, and the
+bytes under its own folder. Nothing they write can touch a recording a camera sent, and nothing at
+all may be changed or deleted from a browser afterwards.
 
 The difference between the three is in [the README](../README.md#who-can-read-what).
 

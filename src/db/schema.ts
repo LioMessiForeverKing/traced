@@ -19,6 +19,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { authUid, authUsers, authenticatedRole } from "drizzle-orm/supabase";
 import type { Meta } from "../store.js";
+import { UPLOAD_NAME_PREFIX } from "../uploads.js";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -45,8 +46,18 @@ function accessToRecording(recording: AnyPgColumn) {
 
 const platformAdmin = sql`${signedIn} and public.is_admin()`;
 
+const uploadPrefix = sql.raw(`'${UPLOAD_NAME_PREFIX}'`);
+
+function uploadOf(recording: AnyPgColumn) {
+  return sql`${platformAdmin} and exists (select 1 from public.recordings r where r.name = ${recording} and r.source = 'upload')`;
+}
+
 function selectPolicy(name: string, predicate: SQL) {
   return pgPolicy(name, { as: "permissive", for: "select", to: authenticatedRole, using: predicate });
+}
+
+function insertPolicy(name: string, predicate: SQL) {
+  return pgPolicy(name, { as: "permissive", for: "insert", to: authenticatedRole, withCheck: predicate });
 }
 
 const projectRef = () =>
@@ -74,6 +85,10 @@ export const platformAdmins = pgTable(
   },
   () => [selectPolicy("platform_admins_select_admin", platformAdmin)],
 );
+
+export const recordingSources = ["axis", "upload"] as const;
+
+export type RecordingSource = (typeof recordingSources)[number];
 
 export const projectRoles = ["member", "viewer"] as const;
 
@@ -142,6 +157,7 @@ export const recordings = pgTable(
   {
     name: text("name").primaryKey(),
     projectId: projectRef(),
+    source: text("source").$type<RecordingSource>().notNull().default("axis"),
     userId: text("user_id"),
     deviceSerial: text("device_serial"),
     status: text("status").notNull(),
@@ -161,7 +177,14 @@ export const recordings = pgTable(
   },
   (table) => [
     index("recordings_project_id").on(table.projectId),
+    check("recordings_source", sql`${table.source} in ('axis', 'upload')`),
     selectPolicy("recordings_select_access", accessTo(table.projectId)),
+    insertPolicy(
+      "recordings_insert_upload_admin",
+      sql`${platformAdmin} and ${table.source} = 'upload' and starts_with(${table.name}, ${uploadPrefix})
+        and ${table.analysisStatus} = 'pending' and ${table.analysisAttempts} = 0
+        and ${table.analysedAt} is null and ${table.analysisError} is null`,
+    ),
   ],
 ).enableRLS();
 
@@ -185,6 +208,10 @@ export const recordingObjects = pgTable(
   (table) => [
     uniqueIndex("recording_objects_recording_name_name").on(table.recordingName, table.name),
     selectPolicy("recording_objects_select_member", memberOfRecording(table.recordingName)),
+    insertPolicy(
+      "recording_objects_insert_upload_admin",
+      sql`${uploadOf(table.recordingName)} and ${table.storagePath} = ${table.recordingName} || '/' || ${table.name}`,
+    ),
   ],
 ).enableRLS();
 
