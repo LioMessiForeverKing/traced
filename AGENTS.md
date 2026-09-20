@@ -39,8 +39,9 @@ never leaves the server. Config lives in `.env.local`, never in the repo.
 **Access** — policies live in `src/db/schema.ts` as `pgPolicy`, not in hand-written SQL, so the
 schema stays the single source of truth. Every table gets one `SELECT` policy for `authenticated`,
 gated on project membership. The only writes a browser may make are the three `INSERT` policies of
-the admin upload path; a member and a viewer write nothing anywhere, and no table has an `UPDATE` or
-`DELETE` policy, so evidence can be added by an admin and altered by nobody. `npm run test:rls`
+the admin upload path and the one `UPDATE` policy that ends it; a member and a viewer write nothing
+anywhere, no table has a `DELETE` policy, and the single update reaches one column of one row, so
+evidence can be added by an admin and altered by nobody. `npm run test:rls`
 proves them against the real project and is the gate before any policy change ships.
 
 `project_members.role` is `member` or `viewer` — the contractor and the insurance side. A new
@@ -63,12 +64,28 @@ no change to gain it. An uploaded recording is named by `src/uploads.ts` and alw
 reason a browser insert cannot land on a camera's row, and the policy enforces the prefix rather
 than trusting it. The three inserts are narrowed the same way — `source = 'upload'` only, a row born
 unanalysed because `analysis_status`, `analysis_attempts`, `analysis_error` and `analysed_at` belong
-to the analyser and no `UPDATE` policy exists to correct a forged one, an object row only where
-`storage_path` is exactly `<recording>/<name>` and the recording is an upload, and a bucket key only
-under an `upload_` folder. That middle check is an `exists` inside the policy rather
-than a sixth `SECURITY DEFINER` function, because a function answering *where a row came from* is
-callable over PostgREST by anyone signed in and would answer about rows they cannot read — the five
-that exist all answer about the caller instead, which is why they are safe to expose.
+to the analyser, an object row only where `storage_path` is exactly `<recording>/<name>`, and a
+bucket key only under the folder of a recording that is an upload. Those last two are an `exists`
+inside the policy rather than a sixth `SECURITY DEFINER` function, because a function answering
+*where a row came from* is callable over PostgREST by anyone signed in and would answer about rows
+they cannot read — the five that exist all answer about the caller instead, which is why they are
+safe to expose.
+
+**The upload write order** — the row goes in first as `status = 'uploading'`, then the bytes, then
+the object row, and only then does the admin move the row to `complete`. `uploading` is the whole
+mechanism: `claimForAnalysis` takes only `complete` rows, so the analyser cannot see a recording
+whose clip is still arriving, and both the object-row and bucket-key policies require the recording
+to be sitting in `uploading`, so no *new* authorisation to write into the folder is granted once the
+row says the clip has landed. The flip is the one `UPDATE` policy in the database — `USING` admits
+an admin's own `source = 'upload'` row while it is `uploading`, `WITH CHECK` admits only `complete`,
+and only when a `kind = 'clip'` object row exists *and* an object is sitting at its `storage_path` —
+the row alone is admin-written and proves nothing, so the check joins `storage.objects` to make the
+bytes the condition. That is as far as a policy can go: it establishes that something is there, never
+that it decodes. The flip is one-way, because a `complete` row no longer satisfies `USING`. A row must also be born with a `completed_at`, because that is what orders the analyser's
+queue and the flip cannot set it later. RLS cannot compare a new row against the old one, so
+the narrowness comes from the grant rather than the policy: `UPDATE` is revoked from `anon` and
+`authenticated` and re-granted on `status` alone, which is also why a later `ADD COLUMN` arrives
+ungrantable rather than writable.
 
 **The Axis protocol** — `src/axis/` is a module, not the spine. `src/axis/app.ts` is the wire and
 the spec is `github.com/AxisCommunications/body-worn-integration-api`; change the wire only with the

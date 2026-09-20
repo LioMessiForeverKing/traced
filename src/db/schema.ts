@@ -48,8 +48,8 @@ const platformAdmin = sql`${signedIn} and public.is_admin()`;
 
 const uploadPrefix = sql.raw(`'${UPLOAD_NAME_PREFIX}'`);
 
-function uploadOf(recording: AnyPgColumn) {
-  return sql`${platformAdmin} and exists (select 1 from public.recordings r where r.name = ${recording} and r.source = 'upload')`;
+function uploadInProgress(recording: AnyPgColumn) {
+  return sql`${platformAdmin} and exists (select 1 from public.recordings r where r.name = ${recording} and r.source = 'upload' and r.status = 'uploading')`;
 }
 
 function selectPolicy(name: string, predicate: SQL) {
@@ -58,6 +58,13 @@ function selectPolicy(name: string, predicate: SQL) {
 
 function insertPolicy(name: string, predicate: SQL) {
   return pgPolicy(name, { as: "permissive", for: "insert", to: authenticatedRole, withCheck: predicate });
+}
+
+/** What keeps the flip to one column is the `REVOKE UPDATE` / `GRANT UPDATE (status)` pair in
+ * `drizzle/0009`, not this policy: RLS cannot compare a new row against the old one. Drizzle
+ * cannot express a column grant, so the schema alone would build a database without it. */
+function updatePolicy(name: string, using: SQL, withCheck: SQL) {
+  return pgPolicy(name, { as: "permissive", for: "update", to: authenticatedRole, using, withCheck });
 }
 
 const projectRef = () =>
@@ -182,8 +189,17 @@ export const recordings = pgTable(
     insertPolicy(
       "recordings_insert_upload_admin",
       sql`${platformAdmin} and ${table.source} = 'upload' and starts_with(${table.name}, ${uploadPrefix})
+        and ${table.status} = 'uploading' and ${table.completedAt} is not null
         and ${table.analysisStatus} = 'pending' and ${table.analysisAttempts} = 0
         and ${table.analysedAt} is null and ${table.analysisError} is null`,
+    ),
+    updatePolicy(
+      "recordings_update_upload_complete",
+      sql`${platformAdmin} and ${table.source} = 'upload' and ${table.status} = 'uploading'`,
+      sql`${table.status} = 'complete'
+        and exists (select 1 from public.recording_objects o
+          join storage.objects b on b.bucket_id = 'recordings' and b.name = o.storage_path
+          where o.recording_name = ${table.name} and o.kind = 'clip')`,
     ),
   ],
 ).enableRLS();
@@ -210,7 +226,7 @@ export const recordingObjects = pgTable(
     selectPolicy("recording_objects_select_member", memberOfRecording(table.recordingName)),
     insertPolicy(
       "recording_objects_insert_upload_admin",
-      sql`${uploadOf(table.recordingName)} and ${table.storagePath} = ${table.recordingName} || '/' || ${table.name}`,
+      sql`${uploadInProgress(table.recordingName)} and ${table.storagePath} = ${table.recordingName} || '/' || ${table.name}`,
     ),
   ],
 ).enableRLS();

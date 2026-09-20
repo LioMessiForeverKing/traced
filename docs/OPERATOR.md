@@ -129,9 +129,11 @@ Put that id in `PROJECT_ID`.
 ### 4. Apply the migrations
 
 The SQL in `drizzle/` runs in numeric order against your project's database. Apply `0000` through
-`0008`. Afterwards every table has row level security on with exactly one `SELECT` policy, and the
+`0009`. Afterwards every table has row level security on with exactly one `SELECT` policy, and the
 `recordings` bucket has a matching one. `0008` adds the only three `INSERT` policies in the
-database, all of them for a platform admin uploading a clip by hand.
+database, all of them for a platform admin uploading a clip by hand, and `0009` adds the only
+`UPDATE` policy — one column of one row, closing the window between the clip landing and the
+recording being ready to analyse.
 
 ### 5. Start it
 
@@ -190,8 +192,10 @@ npm run grant-access -- you@example.com --admin
 
 That is a platform admin: no project membership, and every project readable. The one thing an admin
 may write is an uploaded clip — a recording whose `source` is `upload`, its object row, and the
-bytes under its own folder. Nothing they write can touch a recording a camera sent, and nothing at
-all may be changed or deleted from a browser afterwards.
+bytes under its own folder. The row is born `uploading` and the admin may move it to `complete`
+once the bytes are there; that is the single column a browser may ever update. Nothing they write
+can touch a recording a camera sent, and once the row says `complete` nothing at all may be
+changed or deleted from a browser.
 
 The difference between the three is in [the README](../README.md#who-can-read-what).
 
