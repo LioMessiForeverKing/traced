@@ -186,14 +186,15 @@ export const recordings = pgTable(
     insertPolicy(
       "recordings_insert_upload_admin",
       sql`${platformAdmin} and ${table.source} = 'upload' and starts_with(${table.name}, ${uploadPrefix})
-        and ${table.status} = 'uploading'
+        and ${table.status} = 'uploading' and ${table.completedAt} is not null
         and ${table.analysisStatus} = 'pending' and ${table.analysisAttempts} = 0
         and ${table.analysedAt} is null and ${table.analysisError} is null`,
     ),
     updatePolicy(
       "recordings_update_upload_complete",
       sql`${platformAdmin} and ${table.source} = 'upload' and ${table.status} = 'uploading'`,
-      sql`${table.status} = 'complete'`,
+      sql`${table.status} = 'complete'
+        and exists (select 1 from public.recording_objects o where o.recording_name = ${table.name} and o.kind = 'clip')`,
     ),
   ],
 ).enableRLS();

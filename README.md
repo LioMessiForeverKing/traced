@@ -265,15 +265,20 @@ which is a status the analyser's claim never matches, so it cannot pick up a rec
 still on its way; the bucket key and the object row are both refused unless a recording in exactly
 that state is waiting for them; and only then may the admin move the row to `complete`. That last
 step is the one `UPDATE` policy in the database. It admits an admin's own upload while it is
-`uploading` and admits nothing but `complete` as the result, so it runs once and never back — a
-`complete` row stops matching the policy that would have changed it. A policy cannot compare the
+`uploading`, admits nothing but `complete` as the result, and refuses even that until a
+`kind = 'clip'` object row exists — so the analyser can never be handed a row it will claim and
+then fail on for want of a clip. It runs once and never back: a `complete` row stops matching the
+policy that would have changed it. A policy cannot compare the
 new row against the old one, so what keeps it to a single column is the grant underneath: `UPDATE`
 is revoked from `anon` and `authenticated` on the whole table and re-granted on `status` alone, and
 an admin sending `meta` or `analysis_status` alongside the flip is refused by Postgres before any
 policy is consulted.
 
 Once the row says `complete`, nothing may be updated or deleted, by anyone, including the admin who
-uploaded it — not a second object row, not another byte in the folder, not the status back again.
+uploaded it — not a second object row, not the status back again, and no fresh authorisation to
+write into the folder. The one thing that outlives the flip is a signed upload URL an admin minted
+while the row was still `uploading`: Supabase checks the policy when the URL is issued, not when the
+bytes arrive, so such a token keeps working for its lifetime. It is named in the limits below.
 
 The split runs that way round deliberately. The member-only predicate is the one a table keeps by
 default, so a table nobody has thought about shows a viewer nothing until someone widens it on
@@ -318,9 +323,10 @@ through a signed URL, and writes `recording_events`. In between it parks a secon
 head of the analyser's queue and runs a real claim while the upload is still `uploading`, to watch
 the analyser take that one and leave the upload alone. Around that it asserts the shape of the hole:
 the same upload is refused to a member and to a viewer, a recording claiming `source = 'axis'`, a
-camera-shaped name or a status other than `uploading` is refused, an object row pointing anywhere
-but its own folder is refused, a bucket key under a camera's recording is refused, the flip is
-refused on a camera's recording and to a member and a viewer, sending any second column with the
+camera-shaped name, a status other than `uploading` or no `completed_at` at all is refused, an
+object row pointing anywhere but its own folder is refused, a bucket key under a camera's recording
+is refused, the flip is refused on an upload that has no clip behind it yet, on a camera's
+recording, and to a member and a viewer, sending any second column with the
 flip is refused by the grant while sending any status but `complete` is refused by the policy, and
 once the row is `complete` the admin cannot add a second clip, move the status back, delete the
 events or overwrite the bytes. The member plays it; the insurer reads the record and its events and
@@ -346,6 +352,15 @@ npm run audit:comments
 - No content encryption (`WantEncryption: false`).
 - Supabase Storage on the free plan caps a single upload at 50 MB. Long clips will 500 until the
   plan or the upload path changes, and that now blocks the admin upload as well as the offload.
+- **A signed upload URL outlives the flip it was minted before.** Supabase evaluates the storage
+  policy when `createSignedUploadUrl` is called and not when the bytes are PUT, so a platform admin
+  who mints a spare token while their upload is in progress can still write under that folder after
+  the recording says `complete` — including, with `upsert`, over `clip.mp4` itself. Measured against
+  the real project on 2026-09-20: the overwrite was accepted and the stored bytes changed. This is
+  narrower than what it replaced, because the policy it replaced was keyed on the `upload_` prefix
+  alone and let an admin mint such a token at any time, for any upload, forever; now a token can
+  only be minted during the upload and carries its own expiry. Closing it needs something that
+  tracks or expires issued tokens, which is a mechanism this slice deliberately does not build.
 - An upload whose browser goes away mid-transfer leaves its row at `status = 'uploading'` for good.
   Nothing sweeps it: the analyser will not claim it, the storage folder stays open to an admin, and
   only a person looking at the processing log will know it is there. That is the price of closing

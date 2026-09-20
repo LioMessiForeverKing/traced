@@ -44,9 +44,10 @@ const account: Record<string, { id: string; email: string; password: string }> =
 const session: Record<string, SupabaseClient> = {};
 const recording = uploadRecordingName(STARTED_AT);
 const clipPath = `${recording}/clip.mp4`;
+const clipless = uploadRecordingName(new Date("2026-09-20T07:20:00Z"));
 const decoy = `${randomUUID()}_B8A44F195EF7_20260920T071500Z`;
 const camera = `${randomUUID()}_B8A44F195EF7_20260920T072000Z`;
-const ours = [recording, decoy, camera];
+const ours = [recording, clipless, decoy, camera];
 
 let projectId = "";
 let clipBytes = new Uint8Array(0);
@@ -221,6 +222,11 @@ describe("an admin uploading a clip", () => {
       .insert(recordingRow({ name: uploadRecordingName(STARTED_AT), analysis_attempts: 3 }));
     expect(bornSpent.error).toBeTruthy();
 
+    const bornUnqueued = await boss
+      .from("recordings")
+      .insert(recordingRow({ name: uploadRecordingName(STARTED_AT), completed_at: null }));
+    expect(bornUnqueued.error).toBeTruthy();
+
     const { error } = await boss.from("recordings").insert(recordingRow());
     expect(error).toBeNull();
   });
@@ -310,6 +316,22 @@ describe("an admin uploading a clip", () => {
     expect(row!.analysis_status).toBe("pending");
     expect(row!.analysis_attempts).toBe(0);
   }, 120_000);
+
+  it("refuses the flip until a clip has actually landed", async () => {
+    const boss = as("boss");
+    const born = await boss.from("recordings").insert(recordingRow({ name: clipless }));
+    expect(born.error).toBeNull();
+
+    const early = await boss
+      .from("recordings")
+      .update({ status: "complete" })
+      .eq("name", clipless)
+      .select();
+    expect(early.error?.message).toMatch(/row-level security/);
+
+    const [row] = await db`select status from recordings where name = ${clipless}`;
+    expect(row!.status).toBe("uploading");
+  });
 
   it("refuses the admin every column of the flip but the status", async () => {
     const boss = as("boss");
